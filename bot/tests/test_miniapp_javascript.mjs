@@ -13,3 +13,11 @@ test("voting gives immediate and persisted visual feedback", () => {
     if (!html.includes(marker)) throw new Error(`Missing voting feedback: ${marker}`);
   }
 });
+
+test("planning uses an in-app date form instead of a browser prompt", () => {
+  const html = fs.readFileSync(new URL("../miniapp.html", import.meta.url), "utf8");
+  if (!html.includes('id="planForm"') || !html.includes('type="datetime-local"')) {
+    throw new Error("Missing in-app planning form");
+  }
+  if (html.includes("prompt(`Победила идея")) throw new Error("Browser prompt must not be used");
+});

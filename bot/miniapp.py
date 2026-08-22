@@ -108,7 +108,7 @@ class MiniApp:
         return web.json_response({"id": activity_id})
 
 
-async def start_miniapp(db, bot, token: str):
+def create_miniapp(db, bot, token: str) -> web.Application:
     api = MiniApp(db, bot, token)
     app = web.Application(client_max_size=10 * 1024 * 1024)
     app.add_routes([
@@ -117,6 +117,11 @@ async def start_miniapp(db, bot, token: str):
         web.post("/api/vote/start", api.start_vote), web.post("/api/vote/cast", api.cast_vote),
         web.post("/api/vote/close", api.close_vote), web.post("/api/plan", api.plan),
     ])
+    return app
+
+
+async def start_miniapp(db, bot, token: str):
+    app = create_miniapp(db, bot, token)
     runner = web.AppRunner(app); await runner.setup()
     await web.TCPSite(runner, "127.0.0.1", 8088).start()
     return runner
