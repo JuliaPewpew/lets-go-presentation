@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>let’s go! — бот для общих приключений</title>
+  <meta name="description" content="Превращаем «когда-нибудь надо» в ваши общие воспоминания.">
+  <meta property="og:title" content="let’s go! — бот для общих приключений">
+  <meta property="og:description" content="Из «когда-нибудь» — в воспоминания.">
+  <meta property="og:image" content="og.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main>
+  <nav class="topbar"><a class="brand" href="#start">let’s go!</a><div class="navlinks"><a href="#idea">идея</a><a href="#flow">как работает</a><a href="#mvp">MVP</a></div><a class="pill small" href="#final">погнали ↘</a></nav>
+  <section class="slide hero" id="start"><div class="eyebrow">бот для тех, кто всё собирается</div><h1>let’s<br><em>go!</em></h1><p class="lead">Превращаем «когда-нибудь надо»<br>в ваши общие воспоминания.</p><div class="sticker">не список дел.<br><b>список приключений.</b></div><a class="down" href="#idea" aria-label="Дальше">↓</a></section>
+  <section class="slide problem" id="idea"><div class="section-no">01 / ЗАЧЕМ</div><h2>Идей много.<br>Случается — <span>мало.</span></h2><div class="problem-grid"><p>Мы постоянно говорим: «надо съездить», «давайте попробуем», «когда-нибудь сделаем».</p><p class="accent-card">let’s go! хранит эти идеи, помогает выбрать одну и доводит компанию до действия.</p></div><div class="ticker"><span>ДОБАВИЛИ → ВЫБРАЛИ → ЗАПЛАНИРОВАЛИ → СДЕЛАЛИ → ВСПОМНИЛИ → ДОБАВИЛИ → ВЫБРАЛИ →</span></div></section>
+  <section class="slide" id="flow"><div class="section-no">02 / МЕХАНИКА</div><h2>Пять шагов.<br>Одна хорошая история.</h2><div class="steps"><article><b>01</b><h3>Собираем</h3><p>Каждый добавляет идею — открыто или анонимно.</p></article><article><b>02</b><h3>Оцениваем</h3><p>Сложность, бюджет и длительность — от 1 до 5.</p></article><article><b>03</b><h3>Голосуем</h3><p>Компания выбирает следующее приключение.</p></article><article><b>04</b><h3>Планируем</h3><p>Сразу назначаем дату, время и участников.</p></article><article><b>05</b><h3>Доказываем</h3><p>Все подтверждают, кто-то добавляет фото.</p></article></div></section>
+  <section class="slide idea-card-slide"><div class="section-no light">03 / КАРТОЧКА ИДЕИ</div><div class="idea-card"><div class="anonymous">🎲 автор скрыт</div><h2>Уехать на выходные<br>в случайный город</h2><div class="ratings"><div class="rating"><span>сложность</span><div><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></div></div><div class="rating"><span>бюджет</span><div><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div></div><div class="rating"><span>длительность</span><div><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div></div></div><button>добавить в голосование ↗</button></div><p class="side-note">Никаких длинных анкет.<br>Три понятные шкалы помогают найти активность под конкретный вечер.</p></section>
+  <section class="slide plan-slide"><div class="section-no">04 / ПОСЛЕ ГОЛОСОВАНИЯ</div><div class="winner">победила идея 🎉</div><h2>Сначала дата.<br>Потом напоминание.</h2><div class="calendar-card"><div><small>СУББОТА</small><strong>24</strong><span>августа · 18:00</span></div><div class="people"><i>А</i><i>М</i><i>С</i><i>+2</i></div><p>Бот напомнит за день, в день встречи и после мероприятия.</p></div></section>
+  <section class="slide proof-slide"><div class="section-no light">05 / ЧЕСТНАЯ АЧИВКА</div><h2>Сделано —<br>значит доказано.</h2><div class="proof-grid"><div class="check-card"><span>Подтверждения</span><b>4 из 4</b><i>✓</i></div><div class="check-card"><span>Фотография</span><b>добавлена</b><i>✓</i></div></div><p class="proof-rule">Ачивка выдаётся, только когда <u>все участники подтвердили выполнение</u> и загружено хотя бы одно фото.</p><div class="achievement">🏆 активность выполнена</div></section>
+  <section class="slide archive-slide"><div class="section-no">06 / АРХИВ</div><h2>Не галочки.<br><span>Воспоминания.</span></h2><div class="stats"><div class="metric"><strong>14</strong><span>выполнено</span></div><div class="metric"><strong>27</strong><span>ждут своего часа</span></div><div class="metric"><strong>3</strong><span>месяца подряд</span></div></div><div class="memory-wall"><div class="memory orange">ночной<br>пикник <small>12.07</small></div><div class="memory blue">случайный<br>город <small>03.08</small></div><div class="memory lime">ужин<br>вслепую <small>17.08</small></div></div></section>
+  <section class="slide mvp-slide" id="mvp"><div class="section-no">07 / ПЕРВАЯ ВЕРСИЯ</div><h2>Небольшой бот.<br>Полный цикл.</h2><ol class="mvp-list"><li><span>01</span>Компания и ссылка-приглашение</li><li><span>02</span>Идеи и оценки от 1 до 5</li><li><span>03</span>Голосование и случайный выбор</li><li><span>04</span>Дата, участники и напоминания</li><li><span>05</span>Подтверждения, фото и ачивка</li><li><span>06</span>Общий архив приключений</li></ol></section>
+  <section class="slide final-slide" id="final"><p>ну что?</p><h2>let’s<br><em>go!</em></h2><div class="final-copy">Создаём свою компанию.<br>Записываем первые десять идей.<br><b>И начинаем делать.</b></div><a class="pill final-pill" href="#start">с начала ↑</a></section>
+</main>
+</body>
+</html>
