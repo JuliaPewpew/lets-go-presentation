@@ -206,6 +206,43 @@ class Database:
                 (company_id,),
             )).fetchone()
 
+    async def reschedule_activity(
+        self,
+        company_id: int,
+        activity_id: int,
+        user_id: int,
+        scheduled_at: datetime,
+    ) -> list[int]:
+        """Change a planned activity date and reset reminders for the new schedule."""
+        async with self.connect() as db:
+            activity = await (
+                await db.execute(
+                    """SELECT a.created_by,c.owner_id FROM activities a
+                    JOIN companies c ON c.id=a.company_id
+                    WHERE a.id=? AND a.company_id=? AND a.status='planned'""",
+                    (activity_id, company_id),
+                )
+            ).fetchone()
+            if not activity:
+                raise LookupError("Активность не найдена")
+            if user_id not in (activity["created_by"], activity["owner_id"]):
+                raise PermissionError("Изменить дату может организатор или владелец компании")
+            await db.execute(
+                """UPDATE activities SET scheduled_at=?,
+                reminder_week_sent=0,reminder_day_sent=0,reminder_hours_sent=0,
+                reminder_event_sent=0,reminder_followup_sent=0
+                WHERE id=?""",
+                (scheduled_at.isoformat(), activity_id),
+            )
+            participants = await (
+                await db.execute(
+                    "SELECT user_id FROM activity_participants WHERE activity_id=?",
+                    (activity_id,),
+                )
+            ).fetchall()
+            await db.commit()
+            return [row["user_id"] for row in participants]
+
     async def archive(self, company_id: int, limit: int = 20):
         async with self.connect() as db:
             return await (await db.execute(

@@ -124,6 +124,44 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.db.ideas(self.company_id), [])
         self.assertEqual(await self.db.completion(activity_id), (0, 2, False, False))
 
+    async def test_organizer_or_owner_can_reschedule_and_reminders_reset(self):
+        idea_id = await self.db.add_idea(self.company_id, 2, "Пикник", 1, 1, 2, False)
+        activity_id = await self.db.create_activity(
+            self.company_id, idea_id, datetime.now() + timedelta(days=2), 2
+        )
+        async with self.db.connect() as connection:
+            await connection.execute(
+                """UPDATE activities SET reminder_week_sent=1,reminder_day_sent=1,
+                reminder_hours_sent=1,reminder_event_sent=1,reminder_followup_sent=1
+                WHERE id=?""",
+                (activity_id,),
+            )
+            await connection.commit()
+        changed = datetime.now() + timedelta(days=4)
+        participants = await self.db.reschedule_activity(
+            self.company_id, activity_id, 1, changed
+        )
+        self.assertEqual(set(participants), {1, 2})
+        async with self.db.connect() as connection:
+            activity = await (
+                await connection.execute("SELECT * FROM activities WHERE id=?", (activity_id,))
+            ).fetchone()
+        self.assertEqual(activity["scheduled_at"], changed.isoformat())
+        self.assertEqual(activity["reminder_week_sent"], 0)
+        self.assertEqual(activity["reminder_followup_sent"], 0)
+
+    async def test_regular_member_cannot_reschedule_activity(self):
+        await self.db.upsert_user(3, "third", "Третий")
+        await self.db.join_company(3, self.code)
+        idea_id = await self.db.add_idea(self.company_id, 2, "Пикник", 1, 1, 2, False)
+        activity_id = await self.db.create_activity(
+            self.company_id, idea_id, datetime.now() + timedelta(days=2), 2
+        )
+        with self.assertRaises(PermissionError):
+            await self.db.reschedule_activity(
+                self.company_id, activity_id, 3, datetime.now() + timedelta(days=3)
+            )
+
     async def test_day_reminder_is_sent_once_to_every_participant(self):
         idea_id = await self.db.add_idea(self.company_id, 1, "Завтрашний план", 2, 2, 2, False)
         now = datetime.now()

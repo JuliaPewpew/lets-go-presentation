@@ -244,6 +244,32 @@ class MiniApp:
         await self.db.confirm(activity_id,user["id"]); confirmed,total,has_photo,completed = await self.db.completion(activity_id)
         return web.json_response({"confirmed":confirmed,"total":total,"has_photo":has_photo,"completed":completed})
 
+    async def reschedule_activity(self, request):
+        user = self.user(request)
+        company = await self.company_for(user["id"])
+        activity_id = int(request.match_info["activity_id"])
+        body = await request.json()
+        try:
+            scheduled = future_datetime(body.get("scheduled_at"))
+            participant_ids = await self.db.reschedule_activity(
+                company["id"], activity_id, user["id"], scheduled
+            )
+        except ValidationError as error:
+            self.bad_request(error)
+        except LookupError as error:
+            raise web.HTTPNotFound(text=str(error)) from error
+        except PermissionError as error:
+            raise web.HTTPForbidden(text=str(error)) from error
+        message = f"Дата мероприятия изменена: <b>{scheduled:%d.%m.%Y в %H:%M}</b> 📅"
+        for participant_id in participant_ids:
+            if participant_id == user["id"]:
+                continue
+            try:
+                await self.bot.send_message(participant_id, message)
+            except Exception:
+                continue
+        return web.json_response({"scheduled_at": scheduled.isoformat()})
+
     async def upload_activity_photo(self, request):
         user = self.user(request); company = await self.company_for(user["id"]); activity_id = int(request.match_info["activity_id"])
         async with self.db.connect() as conn:

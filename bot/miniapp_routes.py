@@ -30,6 +30,7 @@ def register_miniapp_routes(app: web.Application, api) -> None:
         web.post("/api/date/confirm", api.confirm_date),
     ])
     app.add_routes([
+        web.put("/api/activity/{activity_id}", api.reschedule_activity),
         web.post("/api/activity/{activity_id}/confirm", api.confirm_activity),
         web.post("/api/activity/{activity_id}/photo", api.upload_activity_photo),
         web.get("/api/archive/photo/{photo_id}", api.archive_photo),

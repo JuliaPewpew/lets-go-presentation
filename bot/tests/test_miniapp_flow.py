@@ -104,8 +104,14 @@ class MiniAppFlowTests(AioHTTPTestCase):
         })
         await self.request_json("POST", "/api/date/vote", {"option_id": option["id"]})
         planned = await self.request_json("POST", "/api/date/confirm", {"option_id": option["id"]})
+        changed_date = (datetime.now() + timedelta(days=12)).replace(microsecond=0).isoformat()
+        changed = await self.request_json(
+            "PUT", f"/api/activity/{planned['id']}", {"scheduled_at": changed_date}
+        )
+        self.assertEqual(changed["scheduled_at"], changed_date)
         final = await self.request_json("GET", "/api/bootstrap")
         self.assertEqual(final["activity"]["title"], chosen["title"])
+        self.assertEqual(final["activity"]["scheduled_at"], changed_date)
         await self.db.confirm(planned["id"], 101)
         await self.db.add_photo(planned["id"], "telegram-photo-id")
         await self.db.completion(planned["id"])

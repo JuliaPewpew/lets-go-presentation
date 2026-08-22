@@ -224,7 +224,21 @@ function activity(b) {
     return;
   }
   const me = data.activity_people.find((x) => +x.id === +data.user.id);
-  b.innerHTML = `<article class="card winner"><small>ЗАПЛАНИРОВАНО</small><h3>${esc(a.title)}</h3><p>${new Date(a.scheduled_at).toLocaleString("ru-RU")}</p></article><div class="card"><b>Подтверждения</b>${data.activity_people.map((x) => `<p>${x.confirmed ? "✅" : "⏳"} ${esc(x.display_name)}</p>`).join("")}${!me?.confirmed ? '<button class="primary" id="confirmActivity">Я участвовал(а)</button>' : '<div class="notice">Ваше подтверждение получено</div>'}<form id="photoForm"><label>Добавить фото — без него ачивка не выдаётся</label><input type="file" name="photo" accept="image/jpeg,image/png,image/webp" required><button class="secondary">Загрузить</button></form></div>`;
+  const canReschedule =
+    +a.created_by === +data.user.id || +data.company.owner_id === +data.user.id;
+  b.innerHTML = `<article class="card winner"><small>ЗАПЛАНИРОВАНО</small><h3>${esc(a.title)}</h3><p>${new Date(a.scheduled_at).toLocaleString("ru-RU")}</p>${canReschedule ? `<form id="rescheduleForm"><label>Изменить дату и время</label><input type="datetime-local" name="scheduled_at" value="${a.scheduled_at.slice(0, 16)}" required><button class="secondary">Сохранить новую дату</button></form>` : ""}</article><div class="card"><b>Подтверждения</b>${data.activity_people.map((x) => `<p>${x.confirmed ? "✅" : "⏳"} ${esc(x.display_name)}</p>`).join("")}${!me?.confirmed ? '<button class="primary" id="confirmActivity">Я участвовал(а)</button>' : '<div class="notice">Ваше подтверждение получено</div>'}<form id="photoForm"><label>Добавить фото — без него ачивка не выдаётся</label><input type="file" name="photo" accept="image/jpeg,image/png,image/webp" required><button class="secondary">Загрузить</button></form></div>`;
+  if (canReschedule) {
+    const form = document.querySelector("#rescheduleForm");
+    form.scheduled_at.min = new Date().toISOString().slice(0, 16);
+    form.onsubmit = (event) => {
+      event.preventDefault();
+      act(
+        `/api/activity/${a.id}`,
+        { scheduled_at: new FormData(form).get("scheduled_at") },
+        "PUT",
+      );
+    };
+  }
   if (!me?.confirmed)
     confirmActivity.onclick = () => act(`/api/activity/${a.id}/confirm`);
   photoForm.onsubmit = (e) => {
