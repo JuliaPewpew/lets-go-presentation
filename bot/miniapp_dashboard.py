@@ -66,6 +66,7 @@ class DashboardLoader:
             vote = {
                 "id": voting["id"],
                 "organizer": voting_round["organizer"],
+                "organizer_id": voting_round["created_by"],
                 "members": [dict(row) for row in status],
             }
         return {

@@ -91,6 +91,7 @@ class MiniAppFlowTests(AioHTTPTestCase):
 
         vote = await self.request_json("POST", "/api/vote/start", {})
         dashboard = await self.request_json("GET", "/api/bootstrap")
+        self.assertEqual(dashboard["vote"]["organizer_id"], 101)
         chosen = dashboard["ideas"][0]
         await self.request_json("POST", "/api/vote/cast", {"round_id": vote["id"], "idea_id": chosen["id"]})
         after_vote = await self.request_json("GET", "/api/bootstrap")

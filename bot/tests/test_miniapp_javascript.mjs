@@ -95,13 +95,13 @@ test("new social and activity features are reachable in the interface", () => {
   }
 });
 
-test("guided journey and Telegram sharing are explicit", () => {
+test("guided next action and Telegram sharing are explicit", () => {
   const script = fs.readFileSync(
     new URL("../miniapp.js", import.meta.url),
     "utf8",
   );
   for (const marker of [
-    "data-go-tab",
+    "data-next-tab",
     "Новое голосование пока недоступно",
     "Пригласить друзей в эту компанию",
     "https://t.me/share/url",
@@ -115,23 +115,102 @@ test("guided journey and Telegram sharing are explicit", () => {
     throw new Error("Random idea button must be removed");
 });
 
-test("journey stage always follows the selected tab", () => {
+test("bottom navigation remains the single source of selected tab", () => {
+  const combined =
+    fs.readFileSync(new URL("../miniapp.html", import.meta.url), "utf8") +
+    fs.readFileSync(new URL("../miniapp.js", import.meta.url), "utf8");
+  for (const tab of ["ideas", "vote", "activity", "archive"]) {
+    if (!combined.includes(`data-tab="${tab}"`))
+      throw new Error(`Missing bottom navigation tab: ${tab}`);
+  }
+  if (!combined.includes('b.classList.toggle("active", b.dataset.tab === tab)'))
+    throw new Error("Bottom navigation must own the active state");
+});
+
+test("navigation has one contextual next action instead of duplicate steps", () => {
   const script = fs.readFileSync(
     new URL("../miniapp.js", import.meta.url),
     "utf8",
   );
-  if (!script.includes("const currentStep = tab;")) {
-    throw new Error(
-      "Journey stage must use the same state as bottom navigation",
-    );
-  }
-  for (const mapping of [
-    '["ideas", "1 · Идеи"]',
-    '["vote", "2 · Выбор"]',
-    '["activity", "3 · План"]',
-    '["archive", "4 · Архив"]',
+  for (const marker of [
+    "function nextAction",
+    'id="nextAction"',
+    "data-next-tab",
   ]) {
-    if (!script.includes(mapping))
-      throw new Error(`Missing tab-stage mapping: ${mapping}`);
+    if (!script.includes(marker))
+      throw new Error(`Missing contextual navigation marker: ${marker}`);
+  }
+  if (script.includes('class="journey"'))
+    throw new Error("Hero must not duplicate bottom navigation");
+});
+
+test("company management is a labelled header action", () => {
+  const html = fs.readFileSync(
+    new URL("../miniapp.html", import.meta.url),
+    "utf8",
+  );
+  const script = fs.readFileSync(
+    new URL("../miniapp.js", import.meta.url),
+    "utf8",
+  );
+  if (
+    !html.includes('id="companyTrigger"') ||
+    !html.includes('id="companyName"')
+  )
+    throw new Error("Company action must be visibly labelled");
+  if (!script.includes("companyName.textContent"))
+    throw new Error("Company action must show the active company name");
+  if (
+    !script.includes("function syncCompanyHeader") ||
+    !script.includes("syncCompanyHeader();")
+  )
+    throw new Error("Company label must refresh after switching companies");
+});
+
+test("only the organizer or company owner can close voting", () => {
+  const script = fs.readFileSync(
+    new URL("../miniapp.js", import.meta.url),
+    "utf8",
+  );
+  for (const marker of [
+    "const canCloseVote",
+    "v.organizer_id",
+    "data.company.owner_id",
+    "Голосование завершит",
+  ]) {
+    if (!script.includes(marker))
+      throw new Error(`Missing vote permission marker: ${marker}`);
+  }
+});
+
+test("impossible actions are disabled with an explanation", () => {
+  const script = fs.readFileSync(
+    new URL("../miniapp.js", import.meta.url),
+    "utf8",
+  );
+  for (const marker of [
+    'id="startVote" disabled',
+    "Добавьте ещё",
+    "aria-disabled",
+  ]) {
+    if (!script.includes(marker))
+      throw new Error(`Missing blocked action marker: ${marker}`);
+  }
+});
+
+test("photo upload and archive expose loading states", () => {
+  const combined =
+    fs.readFileSync(new URL("../miniapp.js", import.meta.url), "utf8") +
+    fs.readFileSync(new URL("../miniapp.css", import.meta.url), "utf8");
+  for (const marker of [
+    'id="photoPicker"',
+    'id="photoPreview"',
+    'id="photoStatus"',
+    "Фото загружено",
+    "archive-photo-loading",
+    "Загружаем фото",
+  ]) {
+    if (!combined.includes(marker))
+      throw new Error(`Missing photo state marker: ${marker}`);
   }
 });

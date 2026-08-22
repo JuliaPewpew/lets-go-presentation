@@ -34,13 +34,30 @@ body {
   font-size: 27px;
   font-weight: 950;
 }
-.avatar {
-  width: 40px;
-  height: 40px;
+.company-trigger {
+  display: grid;
+  grid-template-columns: auto auto auto;
+  align-items: center;
+  gap: 5px;
   border: 2px solid;
-  border-radius: 50%;
+  border-radius: 14px;
+  padding: 7px 10px;
   background: var(--lime);
-  font-weight: 900;
+  color: var(--ink);
+}
+.company-trigger span {
+  font-size: 10px;
+  font-weight: 700;
+  opacity: 0.7;
+}
+.company-trigger b {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.company-trigger i {
+  font-style: normal;
 }
 .hero {
   margin: 0 12px 13px;
@@ -58,21 +75,12 @@ body {
 .hero p {
   margin: 0;
 }
-.journey {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 5px;
+.hero-action {
+  width: 100%;
   margin-top: 15px;
-}
-.journey button {
-  border: 1px solid #ffffff80;
-  border-radius: 10px;
-  padding: 7px 2px;
-  background: #ffffff18;
-  color: white;
-  font-size: 10px;
-}
-.journey button.current {
+  border: 0;
+  border-radius: 12px;
+  padding: 12px;
   background: white;
   color: var(--blue);
   font-weight: 900;
@@ -137,6 +145,13 @@ body {
 }
 .primary {
   background: var(--lime);
+}
+.primary:disabled,
+.secondary:disabled {
+  background: #e5e0d7;
+  color: #777;
+  box-shadow: none;
+  cursor: not-allowed;
 }
 .secondary {
   background: white;
@@ -223,6 +238,77 @@ body {
   object-fit: cover;
   border: 2px solid;
   border-radius: 12px;
+}
+.archive-photo-frame {
+  position: relative;
+  min-height: 125px;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.archive-photo-frame > span {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  text-align: center;
+  color: #666;
+  background: #e5e0d7;
+}
+.archive-photo-loading .archive-photo {
+  opacity: 0;
+}
+.archive-photo-loading > span {
+  animation: pulse 1.2s ease-in-out infinite alternate;
+}
+.photo-error {
+  border: 2px dashed #999;
+}
+.photo-picker {
+  display: block;
+  width: 100%;
+  border: 2px solid;
+  border-radius: 12px;
+  padding: 12px;
+  background: white;
+  text-align: center;
+  font-size: 16px;
+  box-shadow: 2px 2px var(--ink);
+}
+.photo-preview {
+  margin-top: 10px;
+}
+.photo-preview img {
+  display: block;
+  width: 100%;
+  max-height: 240px;
+  object-fit: cover;
+  border: 2px solid;
+  border-radius: 12px;
+}
+.photo-status {
+  min-height: 20px;
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+@keyframes pulse {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 1;
+  }
 }
 .nav {
   position: fixed;

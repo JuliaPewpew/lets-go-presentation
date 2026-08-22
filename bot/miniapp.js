@@ -48,8 +48,12 @@ const inviteFriends = () => {
     `https://t.me/share/url?url=${encodeURIComponent(invite)}&text=${encodeURIComponent(`Вступай в нашу компанию «${data.company.name}» в let’s go!`)}`,
   );
 };
+function syncCompanyHeader() {
+  companyName.textContent = data?.company?.name || "Компания";
+}
 async function refresh() {
   data = await api("/api/bootstrap");
+  syncCompanyHeader();
   if (!data.company) {
     content.innerHTML = "";
     modal("#companyModal");
@@ -72,9 +76,6 @@ async function load() {
     await refresh();
     loading.classList.add("hidden");
     app.classList.remove("hidden");
-    avatar.textContent = (data.user.first_name || "LG")
-      .slice(0, 2)
-      .toUpperCase();
     if (!data.company) modal("#companyModal");
     if (!localStorage.getItem("lg-onboarding")) modal("#onboarding");
   } catch (e) {
@@ -98,26 +99,61 @@ function card(x, vote = false, selected = "") {
           )}</div><div class="comments">${x.comments.map((c) => `<div class="comment"><b>${esc(c.display_name)}:</b> ${esc(c.text)}</div>`).join("")}<form class="comment-form" data-comment="${x.id}"><input name="text" maxlength="500" placeholder="Комментарий"><button class="primary">↑</button></form></div>${can ? `<div class="actions"><button class="link edit" data-id="${x.id}">Изменить</button><button class="link remove" data-id="${x.id}">Удалить</button></div>` : ""}`
   }</article>`;
 }
+function nextAction() {
+  if (data.vote)
+    return {
+      eyebrow: "СЕЙЧАС",
+      title: "Идёт голосование",
+      description: "Выберите идею или проверьте, кто ещё не проголосовал.",
+      label: "Открыть голосование",
+      tab: "vote",
+    };
+  if (data.date_poll)
+    return {
+      eyebrow: "СЛЕДУЮЩИЙ ШАГ",
+      title: "Выбираем дату",
+      description: `Победила идея «${data.date_poll.title}».`,
+      label: "Выбрать дату",
+      tab: "vote",
+    };
+  if (data.activity)
+    return {
+      eyebrow: "ЗАПЛАНИРОВАНО",
+      title: data.activity.title,
+      description: new Date(data.activity.scheduled_at).toLocaleString("ru-RU"),
+      label: "Открыть текущий план",
+      tab: "activity",
+    };
+  if (data.ideas.length < 2)
+    return {
+      eyebrow: "СЛЕДУЮЩИЙ ШАГ",
+      title: "Соберите идеи",
+      description: `Для голосования нужно ещё ${2 - data.ideas.length}.`,
+      label: "+ Добавить идею",
+      tab: "ideas",
+      action: "add-idea",
+    };
+  return {
+    eyebrow: "ВСЁ ГОТОВО",
+    title: "Пора выбрать",
+    description: `${data.ideas.length} идей готовы к голосованию.`,
+    label: "Перейти к выбору",
+    tab: "vote",
+  };
+}
 function render() {
   if (!data?.company) return;
   document
     .querySelectorAll(".nav button")
     .forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
-  const currentStep = tab;
-  const steps = [
-    ["ideas", "1 · Идеи"],
-    ["vote", "2 · Выбор"],
-    ["activity", "3 · План"],
-    ["archive", "4 · Архив"],
-  ];
-  content.innerHTML = `<section class="hero"><small>${esc(data.company.name)}</small><h1>${tab === "ideas" ? "Что сделаем вместе?" : tab === "vote" ? "Выбираем следующее" : tab === "activity" ? "Текущий план" : "Наши воспоминания"}</h1><p>${data.members.length} участников</p><div class="journey">${steps.map(([key, label]) => `<button data-go-tab="${key}" class="${key === currentStep ? "current" : ""}">${label}</button>`).join("")}</div></section><section class="section" id="body"></section>`;
-  document.querySelectorAll("[data-go-tab]").forEach(
-    (button) =>
-      (button.onclick = () => {
-        tab = button.dataset.goTab;
-        render();
-      }),
-  );
+  const next = nextAction();
+  content.innerHTML = `<section class="hero"><small>${next.eyebrow}</small><h1>${esc(next.title)}</h1><p>${esc(next.description)}</p><button class="hero-action" id="nextAction" data-next-tab="${next.tab}" data-next-action="${next.action || "open"}">${esc(next.label)}</button></section><section class="section" id="body"></section>`;
+  const nextActionButton = document.querySelector("#nextAction");
+  nextActionButton.onclick = () => {
+    tab = nextActionButton.dataset.nextTab;
+    render();
+    if (nextActionButton.dataset.nextAction === "add-idea") openIdea();
+  };
   const b = document.querySelector("#body");
   if (tab === "ideas") ideas(b);
   if (tab === "vote") vote(b);
@@ -176,6 +212,9 @@ function vote(b) {
   const v = data.vote,
     me = v?.members.find((m) => +m.id === +data.user.id);
   if (v) {
+    const canCloseVote =
+      +data.user.id === +v.organizer_id ||
+      +data.user.id === +data.company.owner_id;
     b.innerHTML = `<div class="notice">Организатор: <b>${esc(v.organizer)}</b><br>${me?.idea_title ? `Ваш выбор: <b>${esc(me.idea_title)}</b>. Можно изменить.` : "Вы ещё не голосовали."}</div>${data.ideas.map((x) => card(x, true, me?.idea_title)).join("")}<div class="card"><b>✅ Проголосовали:</b> ${
       v.members
         .filter((x) => x.idea_title)
@@ -186,7 +225,7 @@ function vote(b) {
         .filter((x) => !x.idea_title)
         .map((x) => esc(x.display_name))
         .join(", ") || "все"
-    }<button class="primary" id="closeVote">Завершить голосование</button></div>`;
+    }${canCloseVote ? '<button class="primary" id="closeVote">Завершить голосование</button>' : `<div class="notice muted">Голосование завершит ${esc(v.organizer)} или владелец компании.</div>`}</div>`;
     document
       .querySelectorAll(".vote-btn")
       .forEach(
@@ -194,7 +233,8 @@ function vote(b) {
           (x.onclick = () =>
             act("/api/vote/cast", { round_id: v.id, idea_id: +x.dataset.id })),
       );
-    closeVote.onclick = () => act("/api/vote/close", { round_id: v.id });
+    if (canCloseVote)
+      closeVote.onclick = () => act("/api/vote/close", { round_id: v.id });
     return;
   }
   const p = data.date_poll;
@@ -238,8 +278,18 @@ function vote(b) {
     };
     return;
   }
+  const missingIdeas = Math.max(0, 2 - data.ideas.length);
+  if (missingIdeas) {
+    b.innerHTML = `<div class="empty">Добавьте ещё ${missingIdeas} ${missingIdeas === 1 ? "идею" : "идеи"}, чтобы начать выбор.</div><button class="primary" id="startVote" disabled aria-disabled="true">Начать голосование</button><button class="secondary" id="addMissingIdea">+ Добавить идею</button>`;
+    addMissingIdea.onclick = () => {
+      tab = "ideas";
+      render();
+      openIdea();
+    };
+    return;
+  }
   b.innerHTML =
-    '<div class="empty">Нужно хотя бы две идеи.</div><button class="primary" id="startVote">Начать голосование</button>';
+    '<div class="notice">Все готово: участники смогут выбрать одну идею и изменить голос до завершения.</div><button class="primary" id="startVote" aria-disabled="false">Начать голосование</button>';
   startVote.onclick = () => act("/api/vote/start");
 }
 function activity(b) {
@@ -251,7 +301,7 @@ function activity(b) {
   const me = data.activity_people.find((x) => +x.id === +data.user.id);
   const canReschedule =
     +a.created_by === +data.user.id || +data.company.owner_id === +data.user.id;
-  b.innerHTML = `<article class="card winner"><small>ЗАПЛАНИРОВАНО</small><h3>${esc(a.title)}</h3><p>${new Date(a.scheduled_at).toLocaleString("ru-RU")}</p>${canReschedule ? `<form id="rescheduleForm"><label>Изменить дату и время</label><input type="datetime-local" name="scheduled_at" value="${a.scheduled_at.slice(0, 16)}" required><button class="secondary">Сохранить новую дату</button></form>` : ""}</article><div class="card"><b>Подтверждения</b>${data.activity_people.map((x) => `<p>${x.confirmed ? "✅" : "⏳"} ${esc(x.display_name)}</p>`).join("")}${!me?.confirmed ? '<button class="primary" id="confirmActivity">Я участвовал(а)</button>' : '<div class="notice">Ваше подтверждение получено</div>'}<form id="photoForm"><label>Добавить фото — без него ачивка не выдаётся</label><input type="file" name="photo" accept="image/jpeg,image/png,image/webp" required><button class="secondary">Загрузить</button></form></div>`;
+  b.innerHTML = `<article class="card winner"><small>ЗАПЛАНИРОВАНО</small><h3>${esc(a.title)}</h3><p>${new Date(a.scheduled_at).toLocaleString("ru-RU")}</p>${canReschedule ? `<form id="rescheduleForm"><label>Изменить дату и время</label><input type="datetime-local" name="scheduled_at" value="${a.scheduled_at.slice(0, 16)}" required><button class="secondary">Сохранить новую дату</button></form>` : ""}</article><div class="card"><b>Подтверждения</b>${data.activity_people.map((x) => `<p>${x.confirmed ? "✅" : "⏳"} ${esc(x.display_name)}</p>`).join("")}${!me?.confirmed ? '<button class="primary" id="confirmActivity">Я участвовал(а)</button>' : '<div class="notice">Ваше подтверждение получено</div>'}<form id="photoForm" class="photo-form"><label>Добавьте фото — без него ачивка не выдаётся</label><label class="photo-picker" id="photoPicker" for="photoInput">📷 Выбрать фото</label><input class="visually-hidden" id="photoInput" type="file" name="photo" accept="image/jpeg,image/png,image/webp" required><div class="photo-preview hidden" id="photoPreview"><img alt="Предпросмотр выбранного фото"></div><div class="photo-status muted" id="photoStatus" aria-live="polite">Фото ещё не выбрано</div><button class="secondary" id="photoUpload" disabled aria-disabled="true">Загрузить фото</button></form></div>`;
   if (canReschedule) {
     const form = document.querySelector("#rescheduleForm");
     form.scheduled_at.min = new Date().toISOString().slice(0, 16);
@@ -266,9 +316,35 @@ function activity(b) {
   }
   if (!me?.confirmed)
     confirmActivity.onclick = () => act(`/api/activity/${a.id}/confirm`);
-  photoForm.onsubmit = (e) => {
+  photoInput.onchange = () => {
+    const file = photoInput.files?.[0];
+    photoUpload.disabled = !file;
+    photoUpload.setAttribute("aria-disabled", String(!file));
+    if (!file) {
+      photoPreview.classList.add("hidden");
+      photoStatus.textContent = "Фото ещё не выбрано";
+      return;
+    }
+    photoPreview.querySelector("img").src = URL.createObjectURL(file);
+    photoPreview.classList.remove("hidden");
+    photoStatus.textContent = `Выбрано: ${file.name}`;
+  };
+  photoForm.onsubmit = async (e) => {
     e.preventDefault();
-    act(`/api/activity/${a.id}/photo`, new FormData(e.target));
+    photoUpload.disabled = true;
+    photoStatus.textContent = "Загружаем фото…";
+    try {
+      await api(`/api/activity/${a.id}/photo`, {
+        method: "POST",
+        body: new FormData(e.target),
+      });
+      photoStatus.textContent = "Фото загружено ✓";
+      await refresh();
+    } catch (error) {
+      photoStatus.textContent =
+        "Не удалось загрузить фото. Попробуйте ещё раз.";
+      photoUpload.disabled = false;
+    }
   };
 }
 function archive(b) {
@@ -276,7 +352,7 @@ function archive(b) {
     data.archive
       .map(
         (x) =>
-          `<article class="card"><small>🏆 ВЫПОЛНЕНО</small><h3>${esc(x.title)}</h3><div class="gallery">${x.photos.map((p) => `<img class="archive-photo" data-photo="${p.id}">`).join("")}</div><button class="secondary share" data-title="${esc(x.title)}">Поделиться</button></article>`,
+          `<article class="card"><small>🏆 ВЫПОЛНЕНО</small><h3>${esc(x.title)}</h3><div class="gallery">${x.photos.map((p) => `<div class="archive-photo-frame archive-photo-loading"><span>Загружаем фото…</span><img class="archive-photo" data-photo="${p.id}" alt="Фото с активности ${esc(x.title)}"></div>`).join("")}</div><button class="secondary share" data-title="${esc(x.title)}">Поделиться в Telegram</button></article>`,
       )
       .join("") ||
     '<div class="empty">Здесь появятся выполненные приключения.</div>';
@@ -298,9 +374,13 @@ async function photos() {
         headers: { "X-Telegram-Init-Data": init },
       });
       if (!r.ok) throw 0;
+      img.onload = () =>
+        img.parentElement.classList.remove("archive-photo-loading");
       img.src = URL.createObjectURL(await r.blob());
     } catch (_) {
-      img.replaceWith("Фото недоступно");
+      img.parentElement.classList.remove("archive-photo-loading");
+      img.parentElement.innerHTML =
+        '<span class="photo-error">Фото недоступно</span>';
     }
 }
 function openIdea(x = null) {
@@ -395,7 +475,7 @@ document.querySelectorAll(".nav button").forEach(
       render();
     }),
 );
-avatar.onclick = account;
+companyTrigger.onclick = account;
 document
   .querySelectorAll(".close")
   .forEach(
