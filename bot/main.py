@@ -53,6 +53,12 @@ def scale_keyboard(prefix: str) -> InlineKeyboardMarkup:
     ]])
 
 
+def invite_keyboard(invite: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="Вступить в компанию 🚀", url=invite)
+    ]])
+
+
 async def require_company(message: Message):
     company = await db.active_company(message.from_user.id)
     if not company:
@@ -104,9 +110,11 @@ async def create_company_finish(message: Message, state: FSMContext, bot: Bot):
     invite = f"https://t.me/{me.username}?start=join_{code}"
     await state.clear()
     await message.answer(
-        f"Компания <b>{escape(name)}</b> создана!\n\nСсылка для друзей:\n<code>{invite}</code>",
-        reply_markup=menu(),
+        f"Компания <b>{escape(name)}</b> создана!\n\n"
+        f"Отправьте друзьям эту ссылку:\n<a href=\"{invite}\">{invite}</a>",
+        reply_markup=invite_keyboard(invite),
     )
+    await message.answer("Главное меню", reply_markup=menu())
 
 
 @router.message(F.text == "👥 Компания")
@@ -116,7 +124,11 @@ async def company_info(message: Message, bot: Bot):
         return
     me = await bot.get_me()
     invite = f"https://t.me/{me.username}?start=join_{company['invite_code']}"
-    await message.answer(f"<b>{escape(company['name'])}</b>\n\nПригласить друзей:\n<code>{invite}</code>")
+    await message.answer(
+        f"<b>{escape(company['name'])}</b>\n\n"
+        f"Пригласить друзей:\n<a href=\"{invite}\">{invite}</a>",
+        reply_markup=invite_keyboard(invite),
+    )
 
 
 @router.message(F.text == "➕ Добавить идею")
