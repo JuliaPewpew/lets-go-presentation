@@ -29,3 +29,10 @@ test("compact layout does not cover idea cards with a floating add button", () =
   }
   if (html.includes('class="fab"')) throw new Error("Floating add button still overlaps content");
 });
+
+test("archive photos are loaded through the authenticated endpoint", () => {
+  const html = fs.readFileSync(new URL("../miniapp.html", import.meta.url), "utf8");
+  for (const marker of ["data-photo", "loadArchivePhotos", "X-Telegram-Init-Data", "URL.createObjectURL"]) {
+    if (!html.includes(marker)) throw new Error(`Missing secure archive photo behavior: ${marker}`);
+  }
+});

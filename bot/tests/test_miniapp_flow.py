@@ -35,6 +35,12 @@ class FakeBot:
     async def send_message(self, *args, **kwargs):
         return None
 
+    async def get_file(self, file_id):
+        return type("TelegramFile", (), {"file_path": "photos/test.jpg"})()
+
+    async def download_file(self, file_path, destination):
+        destination.write(b"fake-jpeg-content")
+
 
 class MiniAppFlowTests(AioHTTPTestCase):
     async def get_application(self):
@@ -76,9 +82,20 @@ class MiniAppFlowTests(AioHTTPTestCase):
 
         result = await self.request_json("POST", "/api/vote/close", {"round_id": vote["id"]})
         self.assertEqual(result["winner"]["id"], chosen["id"])
-        await self.request_json("POST", "/api/plan", {"idea_id": chosen["id"], "scheduled_at": "2030-08-24T18:00"})
+        planned = await self.request_json("POST", "/api/plan", {"idea_id": chosen["id"], "scheduled_at": "2030-08-24T18:00"})
         final = await self.request_json("GET", "/api/bootstrap")
         self.assertEqual(final["activity"]["title"], chosen["title"])
+        await self.db.confirm(planned["id"], 101)
+        await self.db.add_photo(planned["id"], "telegram-photo-id")
+        await self.db.completion(planned["id"])
+        archive = await self.request_json("GET", "/api/bootstrap")
+        self.assertEqual(archive["archive"][0]["photo_file_id"], "telegram-photo-id")
+        photo = await self.client.get(
+            f"/api/archive/{planned['id']}/photo",
+            headers={"X-Telegram-Init-Data": init_data()},
+        )
+        self.assertEqual(photo.status, 200)
+        self.assertEqual(await photo.read(), b"fake-jpeg-content")
 
 
 if __name__ == "__main__":

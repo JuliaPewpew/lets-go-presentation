@@ -3,7 +3,9 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import mimetypes
 import time
+from io import BytesIO
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import parse_qsl
@@ -107,6 +109,25 @@ class MiniApp:
         activity_id = await self.db.create_activity(company["id"], int(body["idea_id"]), scheduled, user["id"])
         return web.json_response({"id": activity_id})
 
+    async def archive_photo(self, request):
+        user = self.user(request)
+        company = await self.db.active_company(user["id"])
+        if not company:
+            raise web.HTTPForbidden()
+        async with self.db.connect() as conn:
+            activity = await (await conn.execute(
+                """SELECT photo_file_id FROM activities
+                WHERE id=? AND company_id=? AND status='completed'""",
+                (int(request.match_info["activity_id"]), company["id"]),
+            )).fetchone()
+        if not activity or not activity["photo_file_id"]:
+            raise web.HTTPNotFound()
+        telegram_file = await self.bot.get_file(activity["photo_file_id"])
+        content = BytesIO()
+        await self.bot.download_file(telegram_file.file_path, destination=content)
+        mime_type = mimetypes.guess_type(telegram_file.file_path or "")[0] or "image/jpeg"
+        return web.Response(body=content.getvalue(), content_type=mime_type, headers={"Cache-Control": "private, max-age=3600"})
+
 
 def create_miniapp(db, bot, token: str) -> web.Application:
     api = MiniApp(db, bot, token)
@@ -116,6 +137,7 @@ def create_miniapp(db, bot, token: str) -> web.Application:
         web.post("/api/company", api.create_company), web.post("/api/ideas", api.add_idea),
         web.post("/api/vote/start", api.start_vote), web.post("/api/vote/cast", api.cast_vote),
         web.post("/api/vote/close", api.close_vote), web.post("/api/plan", api.plan),
+        web.get("/api/archive/{activity_id}/photo", api.archive_photo),
     ])
     return app
 
