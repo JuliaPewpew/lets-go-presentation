@@ -32,6 +32,14 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(winner["id"], second)
         self.assertNotEqual(first, second)
 
+    async def test_schema_migrations_are_versioned_and_idempotent(self):
+        await self.db.init()
+        async with self.db.connect() as connection:
+            migrations = await (
+                await connection.execute("SELECT version,name FROM schema_migrations ORDER BY version")
+            ).fetchall()
+        self.assertEqual([row["version"] for row in migrations], [1, 2])
+
     async def test_idea_description_is_optional(self):
         await self.db.add_idea(self.company_id, 1, "Пикник", 1, 2, 2, False, "Взять пледы и чай")
         await self.db.add_idea(self.company_id, 2, "Прогулка", 1, 1, 2, False)

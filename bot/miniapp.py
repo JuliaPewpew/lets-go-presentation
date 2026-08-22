@@ -4,16 +4,17 @@ import hashlib
 import hmac
 import json
 import mimetypes
-import os
 import time
 from io import BytesIO
 from datetime import datetime
 from pathlib import Path
-from uuid import uuid4
 from urllib.parse import parse_qsl
 
 from aiohttp import web
 
+from .domain import IdeaInput, REACTIONS, REMINDER_KEYS, ValidationError, future_datetime
+from .miniapp_routes import register_miniapp_routes
+from .photo_storage import PhotoStorage
 
 def validate_init_data(raw: str, token: str) -> dict:
     values = dict(parse_qsl(raw, keep_blank_values=True))
@@ -37,6 +38,11 @@ def json_row(row):
 class MiniApp:
     def __init__(self, db, bot, token: str):
         self.db, self.bot, self.token = db, bot, token
+        self.photos = PhotoStorage(db.path)
+
+    @staticmethod
+    def bad_request(error: ValidationError):
+        raise web.HTTPBadRequest(text=str(error))
 
     def user(self, request: web.Request) -> dict:
         return validate_init_data(request.headers.get("X-Telegram-Init-Data", ""), self.token)
@@ -175,23 +181,23 @@ class MiniApp:
     async def add_idea(self, request):
         user = self.user(request); body = await request.json(); company = await self.db.active_company(user["id"])
         if not company: raise web.HTTPForbidden()
-        title = str(body.get("title", "")).strip()[:180]
-        if len(title) < 4: raise web.HTTPBadRequest(text="Название слишком короткое")
-        ratings = [int(body.get(key, 0)) for key in ("difficulty", "budget", "duration")]
-        if any(x not in range(1, 6) for x in ratings): raise web.HTTPBadRequest(text="Оценки должны быть от 1 до 5")
-        idea_id = await self.db.add_idea(company["id"], user["id"], title, *ratings, bool(body.get("anonymous")), str(body.get("description", "")).strip()[:1000] or None)
+        try: values = IdeaInput.from_mapping(body)
+        except ValidationError as error: self.bad_request(error)
+        idea_id = await self.db.add_idea(
+            company["id"], user["id"], values.title, values.difficulty, values.budget,
+            values.duration, values.anonymous, values.description,
+        )
         return web.json_response({"id": idea_id})
 
     async def update_idea(self, request):
         user = self.user(request); body = await request.json(); idea_id = int(request.match_info["idea_id"])
         _, idea = await self.idea_access(user["id"], idea_id)
         if user["id"] not in (idea["author_id"], idea["owner_id"]): raise web.HTTPForbidden(text="Редактировать может автор или владелец")
-        title = str(body.get("title", "")).strip()[:180]
-        ratings = [int(body.get(key, 0)) for key in ("difficulty", "budget", "duration")]
-        if len(title) < 4 or any(x not in range(1, 6) for x in ratings): raise web.HTTPBadRequest(text="Проверьте название и оценки")
+        try: values = IdeaInput.from_mapping(body)
+        except ValidationError as error: self.bad_request(error)
         async with self.db.connect() as conn:
             await conn.execute("""UPDATE ideas SET title=?,description=?,difficulty=?,budget=?,duration=?,anonymous=? WHERE id=?""",
-                (title, str(body.get("description", "")).strip()[:1000] or None, *ratings, int(bool(body.get("anonymous"))), idea_id))
+                (values.title, values.description, values.difficulty, values.budget, values.duration, int(values.anonymous), idea_id))
             await conn.commit()
         return web.json_response({"ok": True})
 
@@ -216,7 +222,7 @@ class MiniApp:
     async def react(self, request):
         user = self.user(request); idea_id = int(request.match_info["idea_id"]); await self.idea_access(user["id"], idea_id)
         emoji = str((await request.json()).get("emoji", ""))
-        if emoji not in {"👍","❤️","🔥"}: raise web.HTTPBadRequest()
+        if emoji not in REACTIONS: raise web.HTTPBadRequest()
         async with self.db.connect() as conn:
             exists = await (await conn.execute("SELECT 1 FROM idea_reactions WHERE idea_id=? AND user_id=? AND emoji=?", (idea_id,user["id"],emoji))).fetchone()
             if exists: await conn.execute("DELETE FROM idea_reactions WHERE idea_id=? AND user_id=? AND emoji=?", (idea_id,user["id"],emoji))
@@ -256,8 +262,8 @@ class MiniApp:
 
     async def plan(self, request):
         user = self.user(request); body = await request.json(); company = await self.db.active_company(user["id"])
-        scheduled = datetime.fromisoformat(body["scheduled_at"])
-        if scheduled <= datetime.now(): raise web.HTTPBadRequest(text="Выберите будущую дату")
+        try: scheduled = future_datetime(body.get("scheduled_at"))
+        except ValidationError as error: self.bad_request(error)
         activity_id = await self.db.create_activity(company["id"], int(body["idea_id"]), scheduled, user["id"])
         return web.json_response({"id": activity_id})
 
@@ -265,8 +271,8 @@ class MiniApp:
         user = self.user(request); body = await request.json(); round_id = int(body["round_id"])
         voting_round, _ = await self.db.voting_status(round_id)
         if not voting_round or user["id"] not in (voting_round["created_by"], voting_round["owner_id"]): raise web.HTTPForbidden()
-        scheduled = datetime.fromisoformat(body["scheduled_at"])
-        if scheduled <= datetime.now(): raise web.HTTPBadRequest(text="Выберите будущую дату")
+        try: scheduled = future_datetime(body.get("scheduled_at"))
+        except ValidationError as error: self.bad_request(error)
         async with self.db.connect() as conn:
             cursor = await conn.execute("INSERT INTO date_options(round_id,scheduled_at,created_by) VALUES(?,?,?)", (round_id,scheduled.isoformat(),user["id"]))
             await conn.commit()
@@ -311,12 +317,10 @@ class MiniApp:
             activity = await (await conn.execute("SELECT 1 FROM activities WHERE id=? AND company_id=?", (activity_id,company["id"]))).fetchone()
         if not activity: raise web.HTTPNotFound()
         reader = await request.multipart(); field = await reader.next()
-        if not field or field.name != "photo" or field.headers.get("Content-Type","") not in {"image/jpeg","image/png","image/webp"}: raise web.HTTPBadRequest(text="Нужно изображение JPG, PNG или WebP")
+        if not field or field.name != "photo": raise web.HTTPBadRequest(text="Нужно изображение JPG, PNG или WebP")
         content = await field.read(decode=False)
-        if not content or len(content) > 10*1024*1024: raise web.HTTPBadRequest(text="Фото должно быть не больше 10 МБ")
-        extension = {"image/jpeg":"jpg","image/png":"png","image/webp":"webp"}[field.headers["Content-Type"]]
-        photo_dir = Path(os.path.dirname(os.path.abspath(self.db.path))) / "photos"; photo_dir.mkdir(parents=True,exist_ok=True)
-        path = photo_dir / f"{uuid4().hex}.{extension}"; path.write_bytes(content)
+        try: path = self.photos.save(content, field.headers.get("Content-Type", ""))
+        except ValidationError as error: self.bad_request(error)
         async with self.db.connect() as conn:
             cursor = await conn.execute("INSERT INTO activity_photos(activity_id,uploaded_by,storage_path,created_at) VALUES(?,?,?,?)", (activity_id,user["id"],str(path),datetime.now().isoformat()))
             await conn.commit()
@@ -324,8 +328,8 @@ class MiniApp:
         return web.json_response({"id":cursor.lastrowid})
 
     async def update_settings(self, request):
-        user = self.user(request); body = await request.json(); keys=("reminder_week","reminder_day","reminder_hours","reminder_event","reminder_followup")
-        values=[int(bool(body.get(key))) for key in keys]
+        user = self.user(request); body = await request.json()
+        values=[int(bool(body.get(key))) for key in REMINDER_KEYS]
         async with self.db.connect() as conn:
             await conn.execute("""INSERT INTO user_settings(user_id,reminder_week,reminder_day,reminder_hours,reminder_event,reminder_followup)
                 VALUES(?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET reminder_week=excluded.reminder_week,reminder_day=excluded.reminder_day,
@@ -362,17 +366,7 @@ class MiniApp:
 def create_miniapp(db, bot, token: str) -> web.Application:
     api = MiniApp(db, bot, token)
     app = web.Application(client_max_size=10 * 1024 * 1024)
-    app.add_routes([
-        web.get("/", api.index), web.get("/api/bootstrap", api.bootstrap),
-        web.post("/api/company", api.create_company), web.post("/api/company/switch", api.switch_company), web.post("/api/company/leave", api.leave_company),
-        web.post("/api/ideas", api.add_idea), web.put("/api/ideas/{idea_id}", api.update_idea), web.delete("/api/ideas/{idea_id}", api.delete_idea),
-        web.post("/api/ideas/{idea_id}/comments", api.add_comment), web.post("/api/ideas/{idea_id}/reactions", api.react),
-        web.post("/api/vote/start", api.start_vote), web.post("/api/vote/cast", api.cast_vote),
-        web.post("/api/vote/close", api.close_vote), web.post("/api/plan", api.plan),
-        web.post("/api/date/options", api.add_date_option), web.post("/api/date/vote", api.vote_date), web.post("/api/date/confirm", api.confirm_date),
-        web.post("/api/activity/{activity_id}/confirm", api.confirm_activity), web.post("/api/activity/{activity_id}/photo", api.upload_activity_photo),
-        web.post("/api/settings", api.update_settings), web.get("/api/archive/photo/{photo_id}", api.archive_photo),
-    ])
+    register_miniapp_routes(app, api)
     return app
 
 

@@ -7,6 +7,7 @@ from datetime import datetime
 
 import aiosqlite
 
+from .migrations import apply_migrations
 
 SCHEMA = """
 PRAGMA foreign_keys = ON;
@@ -131,6 +132,12 @@ CREATE TABLE IF NOT EXISTS user_settings (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_idea_comments_idea_id ON idea_comments(idea_id);
+CREATE INDEX IF NOT EXISTS idx_ideas_company_status ON ideas(company_id,status,id);
+CREATE INDEX IF NOT EXISTS idx_members_user_id ON members(user_id);
+CREATE INDEX IF NOT EXISTS idx_voting_rounds_company_status ON voting_rounds(company_id,status,id);
+CREATE INDEX IF NOT EXISTS idx_votes_round_idea ON votes(round_id,idea_id);
+CREATE INDEX IF NOT EXISTS idx_activities_company_status ON activities(company_id,status,scheduled_at);
+CREATE INDEX IF NOT EXISTS idx_reactions_idea ON idea_reactions(idea_id);
 CREATE INDEX IF NOT EXISTS idx_date_options_round_id ON date_options(round_id);
 CREATE INDEX IF NOT EXISTS idx_activity_photos_activity_id ON activity_photos(activity_id);
 """
@@ -155,14 +162,7 @@ class Database:
         os.makedirs(directory, exist_ok=True)
         async with self.connect() as db:
             await db.executescript(SCHEMA)
-            columns = await (await db.execute("PRAGMA table_info(ideas)")).fetchall()
-            if "description" not in {column["name"] for column in columns}:
-                await db.execute("ALTER TABLE ideas ADD COLUMN description TEXT")
-            activity_columns = {column["name"] for column in await (await db.execute("PRAGMA table_info(activities)")).fetchall()}
-            if "reminder_week_sent" not in activity_columns:
-                await db.execute("ALTER TABLE activities ADD COLUMN reminder_week_sent INTEGER NOT NULL DEFAULT 0")
-            if "reminder_hours_sent" not in activity_columns:
-                await db.execute("ALTER TABLE activities ADD COLUMN reminder_hours_sent INTEGER NOT NULL DEFAULT 0")
+            await apply_migrations(db)
             await db.execute("PRAGMA optimize")
             await db.commit()
 
