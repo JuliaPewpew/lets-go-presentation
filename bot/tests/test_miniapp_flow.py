@@ -112,6 +112,13 @@ class MiniAppFlowTests(AioHTTPTestCase):
         final = await self.request_json("GET", "/api/bootstrap")
         self.assertEqual(final["activity"]["title"], chosen["title"])
         self.assertEqual(final["activity"]["scheduled_at"], changed_date)
+        blocked = await self.client.post(
+            "/api/vote/start",
+            json={},
+            headers={"X-Telegram-Init-Data": init_data()},
+        )
+        self.assertEqual(blocked.status, 400)
+        self.assertIn("завершите текущую активность", await blocked.text())
         await self.db.confirm(planned["id"], 101)
         await self.db.add_photo(planned["id"], "telegram-photo-id")
         await self.db.completion(planned["id"])
@@ -168,6 +175,16 @@ class MiniAppFlowTests(AioHTTPTestCase):
             headers={"X-Telegram-Init-Data": init_data()},
         )
         self.assertEqual(await photo.read(), b"small-png")
+
+    async def test_owner_can_leave_company_with_successor(self):
+        await self.request_json("POST", "/api/company", {"name": "Друзья"})
+        company = await self.db.active_company(101)
+        await self.db.upsert_user(202, "friend", "Друг")
+        await self.db.join_company(202, company["invite_code"])
+        result = await self.request_json("POST", "/api/company/leave", {})
+        self.assertEqual(result["new_owner"], "Друг")
+        self.assertEqual((await self.db.active_company(202))["owner_id"], 202)
+        self.assertIsNone(await self.db.active_company(101))
 
 
 if __name__ == "__main__":

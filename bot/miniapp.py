@@ -103,13 +103,11 @@ class MiniApp:
 
     async def leave_company(self, request):
         user = self.user(request); company = await self.company_for(user["id"])
-        if company["owner_id"] == user["id"]: raise web.HTTPBadRequest(text="Владелец не может выйти из компании")
-        async with self.db.connect() as conn:
-            await conn.execute("DELETE FROM members WHERE company_id=? AND user_id=?", (company["id"], user["id"]))
-            fallback = await (await conn.execute("SELECT company_id FROM members WHERE user_id=? LIMIT 1", (user["id"],))).fetchone()
-            await conn.execute("UPDATE users SET active_company_id=? WHERE id=?", (fallback["company_id"] if fallback else None, user["id"]))
-            await conn.commit()
-        return web.json_response({"ok": True})
+        try:
+            new_owner = await self.db.leave_company(user["id"], company["id"])
+        except (LookupError, ValueError) as error:
+            raise web.HTTPBadRequest(text=str(error)) from error
+        return web.json_response({"ok": True, "new_owner": new_owner})
 
     async def add_idea(self, request):
         user = self.user(request); body = await request.json(); company = await self.db.active_company(user["id"])
@@ -166,6 +164,10 @@ class MiniApp:
     async def start_vote(self, request):
         user = self.user(request); company = await self.db.active_company(user["id"])
         if not company: raise web.HTTPForbidden()
+        if await self.db.current_activity(company["id"]):
+            raise web.HTTPBadRequest(
+                text="Сначала завершите текущую активность: подтвердите участие и добавьте фото"
+            )
         if len(await self.db.ideas(company["id"])) < 2: raise web.HTTPBadRequest(text="Нужно хотя бы две идеи")
         return web.json_response({"id": await self.db.create_round(company["id"], user["id"])})
 

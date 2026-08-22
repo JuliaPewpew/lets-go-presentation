@@ -85,7 +85,6 @@ test("new social and activity features are reachable in the interface", () => {
     "/api/settings",
     "/confirm",
     'type="file"',
-    "Случайная идея",
     "Поделиться",
     "lg-onboarding",
     "rescheduleForm",
@@ -94,4 +93,24 @@ test("new social and activity features are reachable in the interface", () => {
     if (!html.includes(marker))
       throw new Error(`Missing feature marker: ${marker}`);
   }
+});
+
+test("guided journey and Telegram sharing are explicit", () => {
+  const script = fs.readFileSync(
+    new URL("../miniapp.js", import.meta.url),
+    "utf8",
+  );
+  for (const marker of [
+    "data-go-tab",
+    "Новое голосование пока недоступно",
+    "Пригласить друзей в эту компанию",
+    "https://t.me/share/url",
+    "https://t.me/lets_go_friends_bot?start=app",
+    "Вы переключились на компанию",
+  ]) {
+    if (!script.includes(marker))
+      throw new Error(`Missing journey marker: ${marker}`);
+  }
+  if (script.includes('id="random"'))
+    throw new Error("Random idea button must be removed");
 });

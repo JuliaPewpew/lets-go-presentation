@@ -33,14 +33,27 @@ const api = async (path, opt = {}) => {
     return r.json();
   },
   flash = (e) => {
-    try {
-      tg?.showAlert?.(e.message || String(e));
-    } catch (_) {
-      alert(e.message);
-    }
+    const message = e.message || String(e);
+    if (tg?.showAlert) tg.showAlert(message);
+    else alert(message);
   };
+const botUrl = "https://t.me/lets_go_friends_bot?start=app";
+const openTelegram = (url) => {
+  if (tg?.openTelegramLink) tg.openTelegramLink(url);
+  else location.href = url;
+};
+const inviteFriends = () => {
+  const invite = `https://t.me/lets_go_friends_bot?start=join_${data.company.invite_code}`;
+  openTelegram(
+    `https://t.me/share/url?url=${encodeURIComponent(invite)}&text=${encodeURIComponent(`Вступай в нашу компанию «${data.company.name}» в let’s go!`)}`,
+  );
+};
 async function refresh() {
   data = await api("/api/bootstrap");
+  if (!data.company) {
+    content.innerHTML = "";
+    modal("#companyModal");
+  }
   render();
 }
 async function act(path, body = {}, method = "POST") {
@@ -90,7 +103,28 @@ function render() {
   document
     .querySelectorAll(".nav button")
     .forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
-  content.innerHTML = `<section class="hero"><small>${esc(data.company.name)}</small><h1>${tab === "ideas" ? "Что сделаем вместе?" : tab === "vote" ? "Выбираем следующее" : tab === "activity" ? "Текущий план" : "Наши воспоминания"}</h1><p>${data.members.length} участников</p></section><section class="section" id="body"></section>`;
+  const currentStep =
+    tab === "archive"
+      ? "archive"
+      : data.activity
+        ? "activity"
+        : data.vote || data.date_poll
+          ? "vote"
+          : "ideas";
+  const steps = [
+    ["ideas", "1 · Идеи"],
+    ["vote", "2 · Выбор"],
+    ["activity", "3 · План"],
+    ["archive", "4 · Архив"],
+  ];
+  content.innerHTML = `<section class="hero"><small>${esc(data.company.name)}</small><h1>${tab === "ideas" ? "Что сделаем вместе?" : tab === "vote" ? "Выбираем следующее" : tab === "activity" ? "Текущий план" : "Наши воспоминания"}</h1><p>${data.members.length} участников</p><div class="journey">${steps.map(([key, label]) => `<button data-go-tab="${key}" class="${key === currentStep ? "current" : ""}">${label}</button>`).join("")}</div></section><section class="section" id="body"></section>`;
+  document.querySelectorAll("[data-go-tab]").forEach(
+    (button) =>
+      (button.onclick = () => {
+        tab = button.dataset.goTab;
+        render();
+      }),
+  );
   const b = document.querySelector("#body");
   if (tab === "ideas") ideas(b);
   if (tab === "vote") vote(b);
@@ -104,19 +138,8 @@ function ideas(b) {
       x.budget <= filters.budget &&
       x.duration <= filters.duration,
   );
-  b.innerHTML = `<div class="head"><h2>Идеи</h2><div><button class="link" id="invite">Пригласить</button><button class="pill hot" id="add">+ Идея</button></div></div><div class="filters">${["difficulty", "budget", "duration"].map((k, i) => `<select data-filter="${k}"><option value="5">${["Сложность", "Бюджет", "Время"][i]} ≤ 5</option>${[1, 2, 3, 4].map((n) => `<option value="${n}" ${filters[k] === n ? "selected" : ""}>≤ ${n}</option>`).join("")}</select>`).join("")}</div><button class="secondary" id="random">🎲 Случайная идея</button>${list.map((x) => card(x)).join("") || '<div class="empty">Ничего не найдено</div>'}`;
-  invite.onclick = () =>
-    tg?.openTelegramLink(
-      `https://t.me/lets_go_friends_bot?start=join_${data.company.invite_code}`,
-    );
+  b.innerHTML = `<div class="head"><h2>Идеи</h2><button class="pill hot" id="add">+ Идея</button></div>${data.activity ? '<div class="notice">Следующее голосование станет доступно после завершения текущего плана. Перейдите на шаг «3 · План».</div>' : '<div class="notice">Шаг 1: соберите идеи, затем перейдите на вкладку «2 · Выбор».</div>'}<div class="filters">${["difficulty", "budget", "duration"].map((k, i) => `<select data-filter="${k}"><option value="5">${["Сложность", "Бюджет", "Время"][i]} ≤ 5</option>${[1, 2, 3, 4].map((n) => `<option value="${n}" ${filters[k] === n ? "selected" : ""}>≤ ${n}</option>`).join("")}</select>`).join("")}</div>${list.map((x) => card(x)).join("") || '<div class="empty">Ничего не найдено</div>'}`;
   add.onclick = () => openIdea();
-  random.onclick = () =>
-    list.length &&
-    flash(
-      Error(
-        `Сегодня: ${list[Math.floor(Math.random() * list.length)].title} 🎉`,
-      ),
-    );
   document.querySelectorAll("[data-filter]").forEach(
     (x) =>
       (x.onchange = () => {
@@ -213,6 +236,15 @@ function vote(b) {
     }
     return;
   }
+  if (data.activity) {
+    b.innerHTML =
+      '<div class="notice"><b>Новое голосование пока недоступно.</b><br>Сначала завершите текущую активность: всем участникам нужно подтвердить участие, и кто-то должен добавить фото.</div><button class="primary" id="goActivity">Перейти к текущему плану</button>';
+    goActivity.onclick = () => {
+      tab = "activity";
+      render();
+    };
+    return;
+  }
   b.innerHTML =
     '<div class="empty">Нужно хотя бы две идеи.</div><button class="primary" id="startVote">Начать голосование</button>';
   startVote.onclick = () => act("/api/vote/start");
@@ -261,8 +293,8 @@ function archive(b) {
     .forEach(
       (x) =>
         (x.onclick = () =>
-          tg?.openTelegramLink(
-            `https://t.me/share/url?url=${encodeURIComponent(location.origin)}&text=${encodeURIComponent(`Мы сделали это: ${x.dataset.title} 🏆`)}`,
+          openTelegram(
+            `https://t.me/share/url?url=${encodeURIComponent(botUrl)}&text=${encodeURIComponent(`Мы сделали это: ${x.dataset.title} 🏆 Попробуйте let’s go! вместе с друзьями.`)}`,
           )),
     );
 }
@@ -295,7 +327,8 @@ function openIdea(x = null) {
 }
 function account() {
   const s = data.settings;
-  accountBody.innerHTML = `<h3>Мои компании</h3>${data.companies.map((c) => `<button class="secondary switch" data-id="${c.id}" ${c.active ? "disabled" : ""}>${c.active ? "✓ " : ""}${esc(c.name)}</button>`).join("")}<button class="primary" id="newCompany">+ Новая компания</button>${+data.company.owner_id !== +data.user.id ? '<button class="danger" id="leaveCompany">Выйти из компании</button>' : ""}<h3>Участники</h3><p>${data.members.map((x) => esc(x.display_name)).join(", ")}</p><h3>Напоминания</h3>${[
+  const isOwner = +data.company.owner_id === +data.user.id;
+  accountBody.innerHTML = `<div class="notice">Сейчас выбрана компания: <b>${esc(data.company.name)}</b></div><button class="primary" id="inviteCompany">Пригласить друзей в эту компанию</button><h3>Мои компании</h3>${data.companies.map((c) => `<button class="secondary switch" data-id="${c.id}" ${c.active ? "disabled" : ""}>${c.active ? "✓ Сейчас: " : "Переключиться: "}${esc(c.name)}</button>`).join("")}<button class="primary" id="newCompany">+ Новая компания</button><button class="danger" id="leaveCompany">Выйти из компании</button>${isOwner ? '<p class="muted">Вы владелец. При выходе компания перейдёт самому давнему участнику.</p>' : ""}<h3>Участники</h3><p>${data.members.map((x) => esc(x.display_name)).join(", ")}</p><h3>Напоминания</h3>${[
     ["reminder_week", "За неделю"],
     ["reminder_day", "За день"],
     ["reminder_hours", "За несколько часов"],
@@ -310,21 +343,47 @@ function account() {
       "",
     )}<h3>Статистика</h3><p>🏆 ${data.stats.completed} · 💡 ${data.stats.ideas_created} · 🗳 ${data.stats.votes_cast}</p><p>${data.achievements.join("<br>") || "Первая ачивка уже близко!"}</p>`;
   modal("#accountModal");
-  document
-    .querySelectorAll(".switch")
-    .forEach(
-      (x) =>
-        (x.onclick = () =>
-          act("/api/company/switch", { company_id: +x.dataset.id })),
-    );
+  inviteCompany.onclick = inviteFriends;
+  document.querySelectorAll(".switch").forEach(
+    (button) =>
+      (button.onclick = async () => {
+        try {
+          const result = await api("/api/company/switch", {
+            method: "POST",
+            body: JSON.stringify({ company_id: +button.dataset.id }),
+          });
+          modal("#accountModal", false);
+          await refresh();
+          flash(Error(`Вы переключились на компанию «${result.name}»`));
+        } catch (error) {
+          flash(error);
+        }
+      }),
+  );
   newCompany.onclick = () => {
     modal("#accountModal", false);
     modal("#companyModal");
   };
-  leaveCompany?.addEventListener(
-    "click",
-    () => confirm("Выйти из компании?") && act("/api/company/leave"),
-  );
+  leaveCompany.onclick = async () => {
+    if (!confirm("Выйти из компании?")) return;
+    try {
+      const result = await api("/api/company/leave", {
+        method: "POST",
+        body: "{}",
+      });
+      modal("#accountModal", false);
+      await refresh();
+      flash(
+        Error(
+          result.new_owner
+            ? `Вы вышли. Новый владелец компании — ${result.new_owner}.`
+            : "Вы вышли из компании.",
+        ),
+      );
+    } catch (error) {
+      flash(error);
+    }
+  };
   document.querySelectorAll("[data-setting]").forEach(
     (x) =>
       (x.onchange = () => {

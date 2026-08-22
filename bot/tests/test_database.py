@@ -104,6 +104,18 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(await self.db.switch_company(1, foreign_id))
         self.assertEqual((await self.db.active_company(1))["id"], self.company_id)
 
+    async def test_owner_can_leave_and_transfers_company(self):
+        new_owner = await self.db.leave_company(1, self.company_id)
+        self.assertEqual(new_owner, "Друг")
+        company = await self.db.active_company(2)
+        self.assertEqual(company["owner_id"], 2)
+        self.assertIsNone(await self.db.active_company(1))
+
+    async def test_only_member_cannot_leave_owned_company(self):
+        second_id, _ = await self.db.create_company(1, "Личная")
+        with self.assertRaisesRegex(ValueError, "единственный участник"):
+            await self.db.leave_company(1, second_id)
+
     async def test_rating_must_be_between_one_and_five(self):
         with self.assertRaises(aiosqlite.IntegrityError):
             await self.db.add_idea(self.company_id, 1, "Невозможная оценка", 6, 1, 1, False)

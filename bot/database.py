@@ -104,6 +104,55 @@ class Database:
             await db.commit()
             return str(company["name"])
 
+    async def leave_company(self, user_id: int, company_id: int) -> str | None:
+        """Leave a company, transferring ownership to its oldest other member."""
+        async with self.connect() as db:
+            company = await (
+                await db.execute(
+                    """SELECT c.owner_id FROM companies c JOIN members m ON m.company_id=c.id
+                    WHERE c.id=? AND m.user_id=?""",
+                    (company_id, user_id),
+                )
+            ).fetchone()
+            if not company:
+                raise LookupError("Компания недоступна")
+            new_owner_name = None
+            if company["owner_id"] == user_id:
+                successor = await (
+                    await db.execute(
+                        """SELECT m.user_id,u.display_name FROM members m
+                        JOIN users u ON u.id=m.user_id
+                        WHERE m.company_id=? AND m.user_id!=?
+                        ORDER BY m.joined_at,m.user_id LIMIT 1""",
+                        (company_id, user_id),
+                    )
+                ).fetchone()
+                if not successor:
+                    raise ValueError(
+                        "Вы единственный участник. Сначала пригласите друга, чтобы передать ему компанию."
+                    )
+                await db.execute(
+                    "UPDATE companies SET owner_id=? WHERE id=?",
+                    (successor["user_id"], company_id),
+                )
+                new_owner_name = str(successor["display_name"])
+            await db.execute(
+                "DELETE FROM members WHERE company_id=? AND user_id=?",
+                (company_id, user_id),
+            )
+            fallback = await (
+                await db.execute(
+                    "SELECT company_id FROM members WHERE user_id=? ORDER BY joined_at LIMIT 1",
+                    (user_id,),
+                )
+            ).fetchone()
+            await db.execute(
+                "UPDATE users SET active_company_id=? WHERE id=?",
+                (fallback["company_id"] if fallback else None, user_id),
+            )
+            await db.commit()
+            return new_owner_name
+
     async def add_idea(self, company_id: int, author_id: int, title: str, difficulty: int, budget: int, duration: int, anonymous: bool, description: str | None = None) -> int:
         async with self.connect() as db:
             cursor = await db.execute(

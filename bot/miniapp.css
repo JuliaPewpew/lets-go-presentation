@@ -58,6 +58,25 @@ body {
 .hero p {
   margin: 0;
 }
+.journey {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 5px;
+  margin-top: 15px;
+}
+.journey button {
+  border: 1px solid #ffffff80;
+  border-radius: 10px;
+  padding: 7px 2px;
+  background: #ffffff18;
+  color: white;
+  font-size: 10px;
+}
+.journey button.current {
+  background: white;
+  color: var(--blue);
+  font-weight: 900;
+}
 .section {
   padding: 8px 12px;
 }
