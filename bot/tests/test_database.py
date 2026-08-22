@@ -38,7 +38,9 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
             migrations = await (
                 await connection.execute("SELECT version,name FROM schema_migrations ORDER BY version")
             ).fetchall()
+            journal_mode = (await (await connection.execute("PRAGMA journal_mode")).fetchone())[0]
         self.assertEqual([row["version"] for row in migrations], [1, 2])
+        self.assertEqual(journal_mode, "wal")
 
     async def test_idea_description_is_optional(self):
         await self.db.add_idea(self.company_id, 1, "Пикник", 1, 2, 2, False, "Взять пледы и чай")

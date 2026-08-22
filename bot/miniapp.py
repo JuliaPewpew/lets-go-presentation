@@ -13,6 +13,7 @@ from urllib.parse import parse_qsl
 from aiohttp import web
 
 from .domain import IdeaInput, REACTIONS, REMINDER_KEYS, ValidationError, future_datetime
+from .miniapp_dashboard import DashboardLoader
 from .miniapp_routes import register_miniapp_routes
 from .photo_storage import PhotoStorage
 
@@ -31,14 +32,11 @@ def validate_init_data(raw: str, token: str) -> dict:
     return json.loads(values["user"])
 
 
-def json_row(row):
-    return dict(row) if row else None
-
-
 class MiniApp:
     def __init__(self, db, bot, token: str):
         self.db, self.bot, self.token = db, bot, token
         self.photos = PhotoStorage(db.path)
+        self.dashboard = DashboardLoader(db)
 
     @staticmethod
     def bad_request(error: ValidationError):
@@ -73,85 +71,7 @@ class MiniApp:
         company = await self.db.active_company(user["id"])
         if not company:
             return web.json_response({"user": user, "company": None})
-        ideas = [dict(x) for x in await self.db.ideas(company["id"])]
-        activity = json_row(await self.db.current_activity(company["id"]))
-        archive = [dict(x) for x in await self.db.archive(company["id"])]
-        async with self.db.connect() as conn:
-            companies = [dict(x) for x in await self.db.user_companies(user["id"])]
-            members = [dict(x) for x in await (await conn.execute(
-                "SELECT u.id,u.display_name FROM members m JOIN users u ON u.id=m.user_id WHERE m.company_id=? ORDER BY u.display_name", (company["id"],)
-            )).fetchall()]
-            comments = [dict(x) for x in await (await conn.execute(
-                """SELECT c.id,c.idea_id,c.user_id,c.text,c.created_at,u.display_name
-                FROM idea_comments c JOIN ideas i ON i.id=c.idea_id JOIN users u ON u.id=c.user_id
-                WHERE i.company_id=? ORDER BY c.id""", (company["id"],)
-            )).fetchall()]
-            reactions = [dict(x) for x in await (await conn.execute(
-                """SELECT r.idea_id,r.emoji,COUNT(*) count,
-                MAX(CASE WHEN r.user_id=? THEN 1 ELSE 0 END) mine
-                FROM idea_reactions r JOIN ideas i ON i.id=r.idea_id
-                WHERE i.company_id=? GROUP BY r.idea_id,r.emoji""", (user["id"], company["id"])
-            )).fetchall()]
-            voting = await (await conn.execute(
-                "SELECT id FROM voting_rounds WHERE company_id=? AND status='open' ORDER BY id DESC LIMIT 1", (company["id"],)
-            )).fetchone()
-            await conn.execute("INSERT OR IGNORE INTO user_settings(user_id) VALUES(?)", (user["id"],))
-            settings = dict(await (await conn.execute("SELECT * FROM user_settings WHERE user_id=?", (user["id"],))).fetchone())
-            stats = dict(await (await conn.execute(
-                """SELECT
-                (SELECT COUNT(*) FROM activities WHERE company_id=? AND status='completed') completed,
-                (SELECT COUNT(*) FROM ideas WHERE company_id=? AND author_id=?) ideas_created,
-                (SELECT COUNT(*) FROM votes v JOIN voting_rounds r ON r.id=v.round_id WHERE r.company_id=? AND v.user_id=?) votes_cast""",
-                (company["id"], company["id"], user["id"], company["id"], user["id"]),
-            )).fetchone())
-            activity_people = []
-            if activity:
-                activity_people = [dict(x) for x in await (await conn.execute(
-                    """SELECT u.id,u.display_name,ap.confirmed FROM activity_participants ap
-                    JOIN users u ON u.id=ap.user_id WHERE ap.activity_id=? ORDER BY u.display_name""", (activity["id"],)
-                )).fetchall()]
-            for archived in archive:
-                archived["photos"] = [dict(x) for x in await (await conn.execute(
-                    "SELECT id FROM activity_photos WHERE activity_id=? ORDER BY id", (archived["id"],)
-                )).fetchall()]
-                if archived["photo_file_id"] and not archived["photos"]:
-                    archived["photos"] = [{"id": f"legacy-{archived['id']}"}]
-            closed_round = await (await conn.execute(
-                """SELECT r.id,r.created_by,i.id idea_id,i.title FROM voting_rounds r
-                JOIN votes v ON v.round_id=r.id JOIN ideas i ON i.id=v.idea_id
-                LEFT JOIN activities a ON a.idea_id=i.id
-                WHERE r.company_id=? AND r.status='closed' AND a.id IS NULL
-                GROUP BY r.id,i.id ORDER BY COUNT(v.user_id) DESC,r.id DESC LIMIT 1""", (company["id"],)
-            )).fetchone()
-            date_poll = None
-            if closed_round:
-                options = [dict(x) for x in await (await conn.execute(
-                    """SELECT o.id,o.scheduled_at,COUNT(v.user_id) votes,
-                    MAX(CASE WHEN v.user_id=? THEN 1 ELSE 0 END) mine
-                    FROM date_options o LEFT JOIN date_votes v ON v.option_id=o.id
-                    WHERE o.round_id=? GROUP BY o.id ORDER BY o.scheduled_at""", (user["id"], closed_round["id"])
-                )).fetchall()]
-                date_poll = {**dict(closed_round), "options": options}
-            await conn.commit()
-        by_idea_comments = {idea["id"]: [] for idea in ideas}
-        by_idea_reactions = {idea["id"]: [] for idea in ideas}
-        for comment in comments: by_idea_comments.setdefault(comment["idea_id"], []).append(comment)
-        for reaction in reactions: by_idea_reactions.setdefault(reaction["idea_id"], []).append(reaction)
-        for idea in ideas:
-            idea["comments"] = by_idea_comments.get(idea["id"], [])
-            idea["reactions"] = by_idea_reactions.get(idea["id"], [])
-        vote = None
-        if voting:
-            voting_round, status = await self.db.voting_status(voting["id"])
-            vote = {"id": voting["id"], "organizer": voting_round["organizer"], "members": [dict(x) for x in status]}
-        achievements = []
-        if stats["completed"] >= 1: achievements.append("🏆 Первое приключение")
-        if stats["completed"] >= 5: achievements.append("🔥 Пять приключений")
-        if stats["ideas_created"] >= 5: achievements.append("💡 Генератор идей")
-        if stats["votes_cast"] >= 5: achievements.append("🗳 Голос компании")
-        return web.json_response({"user": user, "company": dict(company), "companies": companies, "members": members,
-            "ideas": ideas, "activity": activity, "activity_people": activity_people, "archive": archive,
-            "vote": vote, "date_poll": date_poll, "settings": settings, "stats": stats, "achievements": achievements})
+        return web.json_response(await self.dashboard.load(user, company))
 
     async def create_company(self, request):
         user = self.user(request); body = await request.json()

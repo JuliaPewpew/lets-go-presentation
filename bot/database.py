@@ -152,6 +152,7 @@ class Database:
         db = await aiosqlite.connect(self.path)
         db.row_factory = aiosqlite.Row
         await db.execute("PRAGMA foreign_keys = ON")
+        await db.execute("PRAGMA busy_timeout = 5000")
         try:
             yield db
         finally:
@@ -161,6 +162,8 @@ class Database:
         directory = os.path.dirname(os.path.abspath(self.path))
         os.makedirs(directory, exist_ok=True)
         async with self.connect() as db:
+            await db.execute("PRAGMA journal_mode = WAL")
+            await db.execute("PRAGMA synchronous = NORMAL")
             await db.executescript(SCHEMA)
             await apply_migrations(db)
             await db.execute("PRAGMA optimize")

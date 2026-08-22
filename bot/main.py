@@ -16,6 +16,7 @@ from aiogram.client.default import DefaultBotProperties
 from .config import load_config
 from .database import Database
 from .miniapp import start_miniapp
+from .reminders import reminder_loop
 
 
 router = Router()
@@ -461,32 +462,12 @@ async def main() -> None:
         await bot.set_chat_menu_button(menu_button=MenuButtonWebApp(text="Открыть", web_app=WebAppInfo(url=config.webapp_url)))
     dispatcher = Dispatcher()
     dispatcher.include_router(router)
-    reminder_task = asyncio.create_task(reminder_loop(bot))
+    reminder_task = asyncio.create_task(reminder_loop(db, bot))
     try:
         await dispatcher.start_polling(bot)
     finally:
         reminder_task.cancel()
         await web_runner.cleanup()
-
-
-async def reminder_loop(bot: Bot) -> None:
-    while True:
-        for user_id, kind, title, scheduled in await db.due_reminders(datetime.now()):
-            if kind == "day":
-                text = f"Уже завтра: <b>{escape(title)}</b>\n{scheduled:%d.%m.%Y в %H:%M}. Вы с нами?"
-            elif kind == "week":
-                text = f"Через неделю у вас <b>{escape(title)}</b>\n{scheduled:%d.%m.%Y в %H:%M}."
-            elif kind == "hours":
-                text = f"Уже через несколько часов: <b>{escape(title)}</b>\nНачало в {scheduled:%H:%M}."
-            elif kind == "event":
-                text = f"Пора! Сегодня вы планировали <b>{escape(title)}</b> 🚀"
-            else:
-                text = f"Ну как прошло <b>{escape(title)}</b>? Откройте «📍 Текущая активность», подтвердите участие и добавьте фото."
-            try:
-                await bot.send_message(user_id, text)
-            except Exception:
-                pass
-        await asyncio.sleep(60)
 
 
 if __name__ == "__main__":
