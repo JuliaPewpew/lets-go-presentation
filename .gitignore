@@ -45,3 +45,4 @@ yarn-error.log*
 bot/data/
 __pycache__/
 *.pyc
+.worktrees/
