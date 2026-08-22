@@ -103,14 +103,7 @@ function render() {
   document
     .querySelectorAll(".nav button")
     .forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
-  const currentStep =
-    tab === "archive"
-      ? "archive"
-      : data.activity
-        ? "activity"
-        : data.vote || data.date_poll
-          ? "vote"
-          : "ideas";
+  const currentStep = tab;
   const steps = [
     ["ideas", "1 · Идеи"],
     ["vote", "2 · Выбор"],

@@ -114,3 +114,24 @@ test("guided journey and Telegram sharing are explicit", () => {
   if (script.includes('id="random"'))
     throw new Error("Random idea button must be removed");
 });
+
+test("journey stage always follows the selected tab", () => {
+  const script = fs.readFileSync(
+    new URL("../miniapp.js", import.meta.url),
+    "utf8",
+  );
+  if (!script.includes("const currentStep = tab;")) {
+    throw new Error(
+      "Journey stage must use the same state as bottom navigation",
+    );
+  }
+  for (const mapping of [
+    '["ideas", "1 · Идеи"]',
+    '["vote", "2 · Выбор"]',
+    '["activity", "3 · План"]',
+    '["archive", "4 · Архив"]',
+  ]) {
+    if (!script.includes(mapping))
+      throw new Error(`Missing tab-stage mapping: ${mapping}`);
+  }
+});
