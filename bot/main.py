@@ -20,6 +20,15 @@ from .database import Database
 router = Router()
 db: Database
 
+MENU_ACTIONS = {
+    "🗳 Голосование", "🎲 Что делаем?",
+    "➕ Новая идея", "➕ Добавить идею",
+    "💡 Все идеи", "📋 Наш список",
+    "📍 Текущая активность", "🏆 Активность",
+    "🖼 Архив",
+    "👥 Компания и друзья", "👥 Компания",
+}
+
 
 class CompanyForm(StatesGroup):
     name = State()
@@ -143,7 +152,8 @@ async def create_company_finish(message: Message, state: FSMContext, bot: Bot):
 
 
 @router.message(F.text.in_({"👥 Компания и друзья", "👥 Компания"}))
-async def company_info(message: Message, bot: Bot):
+async def company_info(message: Message, bot: Bot, state: FSMContext):
+    await state.clear()
     company = await require_company(message)
     if not company:
         return
@@ -158,13 +168,14 @@ async def company_info(message: Message, bot: Bot):
 
 @router.message(F.text.in_({"➕ Новая идея", "➕ Добавить идею"}))
 async def idea_start(message: Message, state: FSMContext):
+    await state.clear()
     if not await require_company(message):
         return
     await state.set_state(IdeaForm.title)
     await message.answer("Что вы хотите сделать вместе? Одно короткое предложение.")
 
 
-@router.message(IdeaForm.title)
+@router.message(IdeaForm.title, ~F.text.in_(MENU_ACTIONS))
 async def idea_title(message: Message, state: FSMContext):
     title = (message.text or "").strip()[:180]
     if len(title) < 4:
@@ -213,7 +224,8 @@ async def idea_save(callback: CallbackQuery, state: FSMContext):
 
 
 @router.message(F.text.in_({"💡 Все идеи", "📋 Наш список"}))
-async def ideas_list(message: Message):
+async def ideas_list(message: Message, state: FSMContext):
+    await state.clear()
     company = await require_company(message)
     if not company:
         return
@@ -229,7 +241,8 @@ async def ideas_list(message: Message):
 
 
 @router.message(F.text.in_({"🗳 Голосование", "🎲 Что делаем?"}))
-async def vote_start(message: Message):
+async def vote_start(message: Message, state: FSMContext):
+    await state.clear()
     company = await require_company(message)
     if not company:
         return
@@ -279,7 +292,7 @@ async def vote_close(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.message(PlanForm.date)
+@router.message(PlanForm.date, ~F.text.in_(MENU_ACTIONS))
 async def plan_date(message: Message, state: FSMContext):
     try:
         scheduled = datetime.strptime((message.text or "").strip(), "%d.%m.%Y %H:%M")
@@ -296,7 +309,8 @@ async def plan_date(message: Message, state: FSMContext):
 
 
 @router.message(F.text.in_({"📍 Текущая активность", "🏆 Активность"}))
-async def activity_show(message: Message):
+async def activity_show(message: Message, state: FSMContext):
+    await state.clear()
     company = await require_company(message)
     if not company:
         return
@@ -316,7 +330,8 @@ async def activity_show(message: Message):
 
 
 @router.message(F.text == "🖼 Архив")
-async def archive_show(message: Message):
+async def archive_show(message: Message, state: FSMContext):
+    await state.clear()
     company = await require_company(message)
     if not company:
         return

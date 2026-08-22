@@ -1,6 +1,6 @@
 import unittest
 
-from bot.main import invite_keyboard, menu, scale_keyboard
+from bot.main import MENU_ACTIONS, invite_keyboard, menu, scale_keyboard
 
 
 class UiTests(unittest.TestCase):
@@ -27,6 +27,7 @@ class UiTests(unittest.TestCase):
             "🖼 Архив",
             "👥 Компания и друзья",
         })
+        self.assertTrue(labels.issubset(MENU_ACTIONS))
 
 
 if __name__ == "__main__":
