@@ -36,6 +36,7 @@ class CompanyForm(StatesGroup):
 
 class IdeaForm(StatesGroup):
     title = State()
+    description = State()
     difficulty = State()
     budget = State()
     duration = State()
@@ -182,8 +183,35 @@ async def idea_title(message: Message, state: FSMContext):
         await message.answer("Опишите идею чуть подробнее.")
         return
     await state.update_data(title=title)
+    await state.set_state(IdeaForm.description)
+    await message.answer(
+        "Хотите добавить описание? Напишите детали, которые пригодятся друзьям.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="Пропустить", callback_data="description:skip")
+        ]]),
+    )
+
+
+async def ask_idea_difficulty(message: Message, state: FSMContext):
     await state.set_state(IdeaForm.difficulty)
     await message.answer("Насколько это сложно?\n1 — не требуется подготовки, 5 — настоящий челлендж.", reply_markup=scale_keyboard("difficulty"))
+
+
+@router.message(IdeaForm.description, ~F.text.in_(MENU_ACTIONS))
+async def idea_description(message: Message, state: FSMContext):
+    description = (message.text or "").strip()[:1000]
+    if not description:
+        await message.answer("Напишите описание или нажмите «Пропустить».")
+        return
+    await state.update_data(description=description)
+    await ask_idea_difficulty(message, state)
+
+
+@router.callback_query(IdeaForm.description, F.data == "description:skip")
+async def idea_description_skip(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(description=None)
+    await ask_idea_difficulty(callback.message, state)
+    await callback.answer()
 
 
 @router.callback_query(IdeaForm.difficulty, F.data.startswith("difficulty:"))
@@ -217,7 +245,10 @@ async def idea_duration(callback: CallbackQuery, state: FSMContext):
 async def idea_save(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     company = await db.active_company(callback.from_user.id)
-    await db.add_idea(company["id"], callback.from_user.id, data["title"], data["difficulty"], data["budget"], data["duration"], callback.data.endswith("1"))
+    await db.add_idea(
+        company["id"], callback.from_user.id, data["title"], data["difficulty"],
+        data["budget"], data["duration"], callback.data.endswith("1"), data.get("description"),
+    )
     await state.clear()
     await callback.message.answer("Идея добавлена в общий список ✨", reply_markup=menu())
     await callback.answer()
@@ -236,7 +267,8 @@ async def ideas_list(message: Message, state: FSMContext):
     text = [f"<b>Идеи компании «{escape(company['name'])}»</b>"]
     for idea in rows[:20]:
         author = "анонимно" if idea["anonymous"] else escape(idea["author"])
-        text.append(f"\n<b>{escape(idea['title'])}</b>\nСложность {idea['difficulty']}/5 · Бюджет {idea['budget']}/5 · Длительность {idea['duration']}/5\n<i>{author}</i>")
+        description = f"\n{escape(idea['description'])}" if idea["description"] else ""
+        text.append(f"\n<b>{escape(idea['title'])}</b>{description}\nСложность {idea['difficulty']}/5 · Бюджет {idea['budget']}/5 · Длительность {idea['duration']}/5\n<i>{author}</i>")
     await message.answer("\n".join(text))
 
 

@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS ideas (
   company_id INTEGER NOT NULL,
   author_id INTEGER NOT NULL,
   title TEXT NOT NULL,
+  description TEXT,
   difficulty INTEGER NOT NULL CHECK(difficulty BETWEEN 1 AND 5),
   budget INTEGER NOT NULL CHECK(budget BETWEEN 1 AND 5),
   duration INTEGER NOT NULL CHECK(duration BETWEEN 1 AND 5),
@@ -102,6 +103,9 @@ class Database:
         os.makedirs(directory, exist_ok=True)
         async with self.connect() as db:
             await db.executescript(SCHEMA)
+            columns = await (await db.execute("PRAGMA table_info(ideas)")).fetchall()
+            if "description" not in {column["name"] for column in columns}:
+                await db.execute("ALTER TABLE ideas ADD COLUMN description TEXT")
             await db.commit()
 
     async def upsert_user(self, user_id: int, username: str | None, name: str) -> None:
@@ -147,12 +151,12 @@ class Database:
                 (user_id,),
             )).fetchone()
 
-    async def add_idea(self, company_id: int, author_id: int, title: str, difficulty: int, budget: int, duration: int, anonymous: bool) -> int:
+    async def add_idea(self, company_id: int, author_id: int, title: str, difficulty: int, budget: int, duration: int, anonymous: bool, description: str | None = None) -> int:
         async with self.connect() as db:
             cursor = await db.execute(
-                """INSERT INTO ideas(company_id,author_id,title,difficulty,budget,duration,anonymous,created_at)
-                VALUES(?,?,?,?,?,?,?,?)""",
-                (company_id, author_id, title, difficulty, budget, duration, int(anonymous), datetime.now().isoformat()),
+                """INSERT INTO ideas(company_id,author_id,title,description,difficulty,budget,duration,anonymous,created_at)
+                VALUES(?,?,?,?,?,?,?,?,?)""",
+                (company_id, author_id, title, description, difficulty, budget, duration, int(anonymous), datetime.now().isoformat()),
             )
             await db.commit()
             return int(cursor.lastrowid)

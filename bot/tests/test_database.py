@@ -32,6 +32,14 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(winner["id"], second)
         self.assertNotEqual(first, second)
 
+    async def test_idea_description_is_optional(self):
+        await self.db.add_idea(self.company_id, 1, "Пикник", 1, 2, 2, False, "Взять пледы и чай")
+        await self.db.add_idea(self.company_id, 2, "Прогулка", 1, 1, 2, False)
+        ideas = await self.db.ideas(self.company_id)
+        by_title = {idea["title"]: idea for idea in ideas}
+        self.assertEqual(by_title["Пикник"]["description"], "Взять пледы и чай")
+        self.assertIsNone(by_title["Прогулка"]["description"])
+
     async def test_voter_can_replace_vote(self):
         first = await self.db.add_idea(self.company_id, 1, "Пикник", 1, 2, 2, False)
         second = await self.db.add_idea(self.company_id, 2, "Поездка", 4, 4, 5, False)
