@@ -20,11 +20,12 @@ class UiTests(unittest.TestCase):
     def test_main_menu_contains_critical_actions(self):
         labels = {button.text for row in menu().keyboard for button in row}
         self.assertEqual(labels, {
-            "🎲 Что делаем?",
-            "➕ Добавить идею",
-            "📋 Наш список",
-            "🏆 Активность",
-            "👥 Компания",
+            "🗳 Голосование",
+            "➕ Новая идея",
+            "💡 Все идеи",
+            "📍 Текущая активность",
+            "🖼 Архив",
+            "👥 Компания и друзья",
         })
 
 

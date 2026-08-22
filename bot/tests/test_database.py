@@ -48,6 +48,24 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         second = await self.db.create_round(self.company_id, 2)
         self.assertEqual(first, second)
 
+    async def test_only_organizer_or_owner_can_close_vote(self):
+        await self.db.upsert_user(3, "guest", "Гость")
+        await self.db.join_company(3, self.code)
+        round_id = await self.db.create_round(self.company_id, 2)
+        self.assertTrue(await self.db.can_close_round(round_id, 2))
+        self.assertTrue(await self.db.can_close_round(round_id, 1))
+        self.assertFalse(await self.db.can_close_round(round_id, 3))
+
+    async def test_voting_status_lists_voted_and_waiting_members(self):
+        idea_id = await self.db.add_idea(self.company_id, 1, "Пикник", 1, 1, 2, False)
+        round_id = await self.db.create_round(self.company_id, 1)
+        await self.db.vote(round_id, 1, idea_id)
+        voting_round, members = await self.db.voting_status(round_id)
+        self.assertEqual(voting_round["organizer"], "Юлия")
+        by_id = {member["id"]: member for member in members}
+        self.assertEqual(by_id[1]["idea_title"], "Пикник")
+        self.assertIsNone(by_id[2]["idea_title"])
+
     async def test_invalid_invite_does_not_change_company(self):
         result = await self.db.join_company(2, "not-a-real-code")
         self.assertIsNone(result)
@@ -91,6 +109,18 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         reminders = await self.db.due_reminders(now)
         self.assertEqual(len(reminders), 2)
         self.assertTrue(all(row[1] == "followup" for row in reminders))
+
+    async def test_completed_activity_appears_in_archive(self):
+        idea_id = await self.db.add_idea(self.company_id, 1, "Поход", 4, 2, 5, False)
+        activity_id = await self.db.create_activity(self.company_id, idea_id, datetime.now(), 1)
+        await self.db.confirm(activity_id, 1)
+        await self.db.confirm(activity_id, 2)
+        await self.db.add_photo(activity_id, "archive-photo")
+        await self.db.completion(activity_id)
+        archive = await self.db.archive(self.company_id)
+        self.assertEqual(len(archive), 1)
+        self.assertEqual(archive[0]["title"], "Поход")
+        self.assertEqual(archive[0]["photo_file_id"], "archive-photo")
 
 
 if __name__ == "__main__":

@@ -186,6 +186,33 @@ class Database:
             )
             await db.commit()
 
+    async def voting_status(self, round_id: int):
+        async with self.connect() as db:
+            voting_round = await (await db.execute(
+                """SELECT r.*,u.display_name organizer,c.owner_id
+                FROM voting_rounds r
+                JOIN users u ON u.id=r.created_by
+                JOIN companies c ON c.id=r.company_id
+                WHERE r.id=?""",
+                (round_id,),
+            )).fetchone()
+            if not voting_round:
+                return None, []
+            members = await (await db.execute(
+                """SELECT u.id,u.display_name,i.title idea_title
+                FROM members m
+                JOIN users u ON u.id=m.user_id
+                LEFT JOIN votes v ON v.round_id=? AND v.user_id=u.id
+                LEFT JOIN ideas i ON i.id=v.idea_id
+                WHERE m.company_id=? ORDER BY u.display_name""",
+                (round_id, voting_round["company_id"]),
+            )).fetchall()
+            return voting_round, members
+
+    async def can_close_round(self, round_id: int, user_id: int) -> bool:
+        voting_round, _ = await self.voting_status(round_id)
+        return bool(voting_round and user_id in (voting_round["created_by"], voting_round["owner_id"]))
+
     async def close_round(self, round_id: int):
         async with self.connect() as db:
             winner = await (await db.execute(
@@ -221,6 +248,15 @@ class Database:
                 WHERE a.company_id=? AND a.status!='completed' ORDER BY a.id DESC LIMIT 1""",
                 (company_id,),
             )).fetchone()
+
+    async def archive(self, company_id: int, limit: int = 20):
+        async with self.connect() as db:
+            return await (await db.execute(
+                """SELECT a.*,i.title FROM activities a JOIN ideas i ON i.id=a.idea_id
+                WHERE a.company_id=? AND a.status='completed'
+                ORDER BY a.scheduled_at DESC LIMIT ?""",
+                (company_id, limit),
+            )).fetchall()
 
     async def confirm(self, activity_id: int, user_id: int) -> None:
         async with self.connect() as db:
