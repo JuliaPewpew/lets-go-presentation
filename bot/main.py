@@ -309,19 +309,29 @@ async def vote_refresh(callback: CallbackQuery):
 
 
 @router.callback_query(F.data.startswith("vote_close:"))
-async def vote_close(callback: CallbackQuery, state: FSMContext):
+async def vote_close(callback: CallbackQuery, state: FSMContext, bot: Bot):
     round_id = int(callback.data.split(":")[1])
     if not await db.can_close_round(round_id, callback.from_user.id):
         await callback.answer("Завершить голосование может только организатор или владелец компании.", show_alert=True)
         return
+    _, members = await db.voting_status(round_id)
     winner = await db.close_round(round_id)
     if not winner:
         await callback.answer("Пока никто не проголосовал.", show_alert=True)
         return
+    await callback.answer("Голосование завершено")
     await state.update_data(winner_id=winner["id"], winner_title=winner["title"])
     await state.set_state(PlanForm.date)
-    await callback.message.answer(f"Победила идея <b>{escape(winner['title'])}</b> 🎉\n\nКогда встречаемся? Напишите дату и время в формате <code>24.08.2026 18:00</code>.")
-    await callback.answer()
+    result_text = f"Голосование завершено! Победила идея <b>{escape(winner['title'])}</b> 🎉"
+    await callback.message.answer(result_text, reply_markup=menu())
+    for member in members:
+        if member["id"] == callback.from_user.id:
+            continue
+        try:
+            await bot.send_message(member["id"], result_text, reply_markup=menu())
+        except Exception:
+            pass
+    await callback.message.answer("Когда встречаемся? Напишите дату и время в формате <code>24.08.2026 18:00</code>.")
 
 
 @router.message(PlanForm.date, ~F.text.in_(MENU_ACTIONS))
