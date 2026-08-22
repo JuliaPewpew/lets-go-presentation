@@ -17,6 +17,22 @@ from .miniapp_dashboard import DashboardLoader
 from .miniapp_routes import register_miniapp_routes
 from .photo_storage import PhotoStorage
 
+
+ASSET_FILES = ("miniapp.html", "miniapp.css", "miniapp.js")
+
+
+def miniapp_asset_version() -> str:
+    digest = hashlib.sha256()
+    directory = Path(__file__).parent
+    for filename in ASSET_FILES:
+        digest.update((directory / filename).read_bytes())
+    return digest.hexdigest()[:12]
+
+
+def versioned_webapp_url(url: str) -> str:
+    separator = "&" if "?" in url else "?"
+    return f"{url}{separator}v={miniapp_asset_version()}"
+
 def validate_init_data(raw: str, token: str) -> dict:
     values = dict(parse_qsl(raw, keep_blank_values=True))
     received_hash = values.pop("hash", "")
@@ -37,6 +53,7 @@ class MiniApp:
         self.db, self.bot, self.token = db, bot, token
         self.photos = PhotoStorage(db.path)
         self.dashboard = DashboardLoader(db)
+        self.asset_version = miniapp_asset_version()
 
     @staticmethod
     def bad_request(error: ValidationError):
@@ -63,7 +80,17 @@ class MiniApp:
         return company, idea
 
     async def index(self, request):
-        return web.FileResponse(Path(__file__).with_name("miniapp.html"))
+        html = (
+            Path(__file__)
+            .with_name("miniapp.html")
+            .read_text(encoding="utf-8")
+            .replace("__ASSET_VERSION__", self.asset_version)
+        )
+        return web.Response(
+            text=html,
+            content_type="text/html",
+            headers={"Cache-Control": "no-store, max-age=0"},
+        )
 
     async def asset(self, request):
         assets = {
@@ -75,7 +102,10 @@ class MiniApp:
             raise web.HTTPNotFound()
         return web.FileResponse(
             Path(__file__).with_name(asset[0]),
-            headers={"Content-Type": f"{asset[1]}; charset=utf-8", "Cache-Control": "public, max-age=300"},
+            headers={
+                "Content-Type": f"{asset[1]}; charset=utf-8",
+                "Cache-Control": "public, max-age=31536000, immutable",
+            },
         )
 
     async def bootstrap(self, request):

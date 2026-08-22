@@ -7,7 +7,7 @@ from urllib.parse import urlencode
 
 from aiohttp import web
 
-from bot.miniapp import validate_init_data
+from bot.miniapp import miniapp_asset_version, validate_init_data, versioned_webapp_url
 
 
 def signed_init_data(token: str, user: dict, auth_date: int | None = None) -> str:
@@ -19,6 +19,14 @@ def signed_init_data(token: str, user: dict, auth_date: int | None = None) -> st
 
 
 class MiniAppAuthTests(unittest.TestCase):
+    def test_webapp_url_is_cache_busted_for_each_asset_version(self):
+        version = miniapp_asset_version()
+        self.assertEqual(len(version), 12)
+        self.assertEqual(
+            versioned_webapp_url("https://example.test/app"),
+            f"https://example.test/app?v={version}",
+        )
+
     def test_valid_telegram_signature(self):
         user = {"id": 42, "first_name": "Юлия"}
         self.assertEqual(validate_init_data(signed_init_data("token", user), "token"), user)

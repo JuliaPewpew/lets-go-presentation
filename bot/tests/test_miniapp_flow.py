@@ -67,14 +67,17 @@ class MiniAppFlowTests(AioHTTPTestCase):
     async def test_miniapp_assets_are_served_separately(self):
         page = await self.client.get("/")
         html = await page.text()
-        self.assertIn('/assets/miniapp.css', html)
-        self.assertIn('/assets/miniapp.js', html)
+        self.assertNotIn("__ASSET_VERSION__", html)
+        self.assertRegex(html, r'/assets/miniapp\.css\?v=[a-f0-9]{12}')
+        self.assertRegex(html, r'/assets/miniapp\.js\?v=[a-f0-9]{12}')
+        self.assertIn("no-store", page.headers["Cache-Control"])
         javascript = await self.client.get("/assets/miniapp.js")
         stylesheet = await self.client.get("/assets/miniapp.css")
         self.assertEqual(javascript.status, 200)
         self.assertEqual(stylesheet.status, 200)
         self.assertIn("application/javascript", javascript.headers["Content-Type"])
         self.assertIn("text/css", stylesheet.headers["Content-Type"])
+        self.assertIn("immutable", javascript.headers["Cache-Control"])
 
     async def test_complete_company_to_activity_flow(self):
         created = await self.request_json("POST", "/api/company", {"name": "Тестовая компания"})

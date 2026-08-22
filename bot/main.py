@@ -14,7 +14,7 @@ from aiogram.client.default import DefaultBotProperties
 
 from .config import load_config
 from .database import Database
-from .miniapp import start_miniapp
+from .miniapp import start_miniapp, versioned_webapp_url
 from .reminders import reminder_loop
 from .telegram_ui import CompanyForm, IdeaForm, MENU_ACTIONS, PlanForm, invite_keyboard, menu, scale_keyboard
 
@@ -409,7 +409,10 @@ async def main() -> None:
     bot = Bot(config.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     web_runner = await start_miniapp(db, bot, config.bot_token)
     if config.webapp_url:
-        await bot.set_chat_menu_button(menu_button=MenuButtonWebApp(text="Открыть", web_app=WebAppInfo(url=config.webapp_url)))
+        await bot.set_chat_menu_button(menu_button=MenuButtonWebApp(
+            text="Открыть",
+            web_app=WebAppInfo(url=versioned_webapp_url(config.webapp_url)),
+        ))
     dispatcher = Dispatcher()
     dispatcher.include_router(router)
     reminder_task = asyncio.create_task(reminder_loop(db, bot))
