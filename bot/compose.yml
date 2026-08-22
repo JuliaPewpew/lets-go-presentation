@@ -9,6 +9,7 @@ services:
       - .env
     environment:
       DATABASE_PATH: /data/lets_go.db
+      WEBAPP_URL: https://lets-go.147-45-245-118.nip.io
     volumes:
       - lets_go_data:/data
     healthcheck:
@@ -18,5 +19,16 @@ services:
       retries: 3
       start_period: 15s
 
+  web:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
 volumes:
   lets_go_data:
+  caddy_data:
+  caddy_config:

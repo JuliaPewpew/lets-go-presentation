@@ -10,11 +10,12 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, Message, ReplyKeyboardMarkup
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, MenuButtonWebApp, Message, ReplyKeyboardMarkup, WebAppInfo
 from aiogram.client.default import DefaultBotProperties
 
 from .config import load_config
 from .database import Database
+from .miniapp import start_miniapp
 
 
 router = Router()
@@ -428,6 +429,9 @@ async def main() -> None:
     db = Database(config.database_path)
     await db.init()
     bot = Bot(config.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    web_runner = await start_miniapp(db, bot, config.bot_token)
+    if config.webapp_url:
+        await bot.set_chat_menu_button(menu_button=MenuButtonWebApp(text="Открыть", web_app=WebAppInfo(url=config.webapp_url)))
     dispatcher = Dispatcher()
     dispatcher.include_router(router)
     reminder_task = asyncio.create_task(reminder_loop(bot))
@@ -435,6 +439,7 @@ async def main() -> None:
         await dispatcher.start_polling(bot)
     finally:
         reminder_task.cancel()
+        await web_runner.cleanup()
 
 
 async def reminder_loop(bot: Bot) -> None:

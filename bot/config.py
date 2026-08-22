@@ -10,6 +10,7 @@ class Config:
     bot_token: str
     database_path: str
     timezone: str
+    webapp_url: str
 
 
 def load_config() -> Config:
@@ -21,4 +22,5 @@ def load_config() -> Config:
         bot_token=token,
         database_path=os.getenv("DATABASE_PATH", "./data/lets_go.db"),
         timezone=os.getenv("BOT_TIMEZONE", "Europe/Moscow"),
+        webapp_url=os.getenv("WEBAPP_URL", ""),
     )
