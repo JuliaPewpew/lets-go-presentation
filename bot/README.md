@@ -33,3 +33,13 @@ cp .env.example .env
 ```bash
 python3 -m unittest discover -s bot/tests
 ```
+
+## Docker
+
+Из корня проекта:
+
+```bash
+docker compose --env-file bot/.env -f bot/compose.yml up -d --build
+```
+
+Данные хранятся в отдельном Docker volume `lets_go_data`.
