@@ -21,3 +21,11 @@ test("planning uses an in-app date form instead of a browser prompt", () => {
   }
   if (html.includes("prompt(`Победила идея")) throw new Error("Browser prompt must not be used");
 });
+
+test("compact layout does not cover idea cards with a floating add button", () => {
+  const html = fs.readFileSync(new URL("../miniapp.html", import.meta.url), "utf8");
+  if (!html.includes('id="addInline"') || !html.includes("skeleton-card")) {
+    throw new Error("Missing compact add action or loading skeleton");
+  }
+  if (html.includes('class="fab"')) throw new Error("Floating add button still overlaps content");
+});
