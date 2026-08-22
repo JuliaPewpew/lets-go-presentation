@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -12,7 +13,7 @@ class Config:
 
 
 def load_config() -> Config:
-    load_dotenv()
+    load_dotenv(Path(__file__).with_name(".env"))
     token = os.getenv("BOT_TOKEN", "")
     if not token:
         raise RuntimeError("BOT_TOKEN is missing. Copy .env.example to .env and add the token.")
