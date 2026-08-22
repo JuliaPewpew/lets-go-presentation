@@ -5,8 +5,10 @@ import os
 import tempfile
 import time
 import unittest
+from datetime import datetime, timedelta
 from urllib.parse import urlencode
 
+from aiohttp import FormData
 from aiohttp.test_utils import AioHTTPTestCase
 
 from bot.database import Database
@@ -82,7 +84,14 @@ class MiniAppFlowTests(AioHTTPTestCase):
 
         result = await self.request_json("POST", "/api/vote/close", {"round_id": vote["id"]})
         self.assertEqual(result["winner"]["id"], chosen["id"])
-        planned = await self.request_json("POST", "/api/plan", {"idea_id": chosen["id"], "scheduled_at": "2030-08-24T18:00"})
+        poll = await self.request_json("GET", "/api/bootstrap")
+        self.assertEqual(poll["date_poll"]["title"], chosen["title"])
+        future = (datetime.now() + timedelta(days=10)).replace(microsecond=0).isoformat()
+        option = await self.request_json("POST", "/api/date/options", {
+            "round_id": vote["id"], "scheduled_at": future,
+        })
+        await self.request_json("POST", "/api/date/vote", {"option_id": option["id"]})
+        planned = await self.request_json("POST", "/api/date/confirm", {"option_id": option["id"]})
         final = await self.request_json("GET", "/api/bootstrap")
         self.assertEqual(final["activity"]["title"], chosen["title"])
         await self.db.confirm(planned["id"], 101)
@@ -91,11 +100,56 @@ class MiniAppFlowTests(AioHTTPTestCase):
         archive = await self.request_json("GET", "/api/bootstrap")
         self.assertEqual(archive["archive"][0]["photo_file_id"], "telegram-photo-id")
         photo = await self.client.get(
-            f"/api/archive/{planned['id']}/photo",
+            f"/api/archive/photo/legacy-{planned['id']}",
             headers={"X-Telegram-Init-Data": init_data()},
         )
         self.assertEqual(photo.status, 200)
         self.assertEqual(await photo.read(), b"fake-jpeg-content")
+
+    async def test_social_company_settings_and_photo_upload(self):
+        first = await self.request_json("POST", "/api/company", {"name": "Первая"})
+        await self.request_json("POST", "/api/company", {"name": "Вторая"})
+        dashboard = await self.request_json("GET", "/api/bootstrap")
+        first_id = next(x["id"] for x in dashboard["companies"] if x["name"] == "Первая")
+        await self.request_json("POST", "/api/company/switch", {"company_id": first_id})
+        idea = await self.request_json("POST", "/api/ideas", {
+            "title": "Поехать за город", "description": "С пледом", "difficulty": 2,
+            "budget": 2, "duration": 3, "anonymous": False,
+        })
+        await self.request_json("POST", f"/api/ideas/{idea['id']}/comments", {"text": "Я за!"})
+        await self.request_json("POST", f"/api/ideas/{idea['id']}/reactions", {"emoji": "❤️"})
+        await self.request_json("PUT", f"/api/ideas/{idea['id']}", {
+            "title": "Поехать за город вместе", "description": "С пледом", "difficulty": 2,
+            "budget": 2, "duration": 3, "anonymous": False,
+        })
+        await self.request_json("POST", "/api/settings", {
+            "reminder_week": False, "reminder_day": True, "reminder_hours": True,
+            "reminder_event": False, "reminder_followup": True,
+        })
+        state = await self.request_json("GET", "/api/bootstrap")
+        self.assertEqual(state["ideas"][0]["comments"][0]["text"], "Я за!")
+        self.assertEqual(state["ideas"][0]["reactions"][0]["count"], 1)
+        self.assertEqual(state["settings"]["reminder_week"], 0)
+        self.assertEqual(first["id"], first_id)
+
+        activity_id = await self.db.create_activity(
+            first_id, idea["id"], datetime.now() + timedelta(days=2), 101
+        )
+        await self.request_json("POST", f"/api/activity/{activity_id}/confirm", {})
+        form = FormData()
+        form.add_field("photo", b"small-png", filename="memory.png", content_type="image/png")
+        response = await self.client.post(
+            f"/api/activity/{activity_id}/photo", data=form,
+            headers={"X-Telegram-Init-Data": init_data()},
+        )
+        self.assertEqual(response.status, 200, await response.text())
+        archived = await self.request_json("GET", "/api/bootstrap")
+        photo_id = archived["archive"][0]["photos"][0]["id"]
+        photo = await self.client.get(
+            f"/api/archive/photo/{photo_id}",
+            headers={"X-Telegram-Init-Data": init_data()},
+        )
+        self.assertEqual(await photo.read(), b"small-png")
 
 
 if __name__ == "__main__":

@@ -474,6 +474,10 @@ async def reminder_loop(bot: Bot) -> None:
         for user_id, kind, title, scheduled in await db.due_reminders(datetime.now()):
             if kind == "day":
                 text = f"Уже завтра: <b>{escape(title)}</b>\n{scheduled:%d.%m.%Y в %H:%M}. Вы с нами?"
+            elif kind == "week":
+                text = f"Через неделю у вас <b>{escape(title)}</b>\n{scheduled:%d.%m.%Y в %H:%M}."
+            elif kind == "hours":
+                text = f"Уже через несколько часов: <b>{escape(title)}</b>\nНачало в {scheduled:%H:%M}."
             elif kind == "event":
                 text = f"Пора! Сегодня вы планировали <b>{escape(title)}</b> 🚀"
             else:

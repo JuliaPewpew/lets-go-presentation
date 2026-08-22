@@ -81,6 +81,58 @@ CREATE TABLE IF NOT EXISTS activity_participants (
   PRIMARY KEY (activity_id, user_id),
   FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS idea_comments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  idea_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  text TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (idea_id) REFERENCES ideas(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS idea_reactions (
+  idea_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  emoji TEXT NOT NULL,
+  PRIMARY KEY (idea_id,user_id,emoji),
+  FOREIGN KEY (idea_id) REFERENCES ideas(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS date_options (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  round_id INTEGER NOT NULL,
+  scheduled_at TEXT NOT NULL,
+  created_by INTEGER NOT NULL,
+  FOREIGN KEY (round_id) REFERENCES voting_rounds(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS date_votes (
+  option_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  PRIMARY KEY (option_id,user_id),
+  FOREIGN KEY (option_id) REFERENCES date_options(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS activity_photos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  activity_id INTEGER NOT NULL,
+  uploaded_by INTEGER NOT NULL,
+  storage_path TEXT,
+  telegram_file_id TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS user_settings (
+  user_id INTEGER PRIMARY KEY,
+  reminder_week INTEGER NOT NULL DEFAULT 1,
+  reminder_day INTEGER NOT NULL DEFAULT 1,
+  reminder_hours INTEGER NOT NULL DEFAULT 1,
+  reminder_event INTEGER NOT NULL DEFAULT 1,
+  reminder_followup INTEGER NOT NULL DEFAULT 1,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_idea_comments_idea_id ON idea_comments(idea_id);
+CREATE INDEX IF NOT EXISTS idx_date_options_round_id ON date_options(round_id);
+CREATE INDEX IF NOT EXISTS idx_activity_photos_activity_id ON activity_photos(activity_id);
 """
 
 
@@ -106,6 +158,12 @@ class Database:
             columns = await (await db.execute("PRAGMA table_info(ideas)")).fetchall()
             if "description" not in {column["name"] for column in columns}:
                 await db.execute("ALTER TABLE ideas ADD COLUMN description TEXT")
+            activity_columns = {column["name"] for column in await (await db.execute("PRAGMA table_info(activities)")).fetchall()}
+            if "reminder_week_sent" not in activity_columns:
+                await db.execute("ALTER TABLE activities ADD COLUMN reminder_week_sent INTEGER NOT NULL DEFAULT 0")
+            if "reminder_hours_sent" not in activity_columns:
+                await db.execute("ALTER TABLE activities ADD COLUMN reminder_hours_sent INTEGER NOT NULL DEFAULT 0")
+            await db.execute("PRAGMA optimize")
             await db.commit()
 
     async def upsert_user(self, user_id: int, username: str | None, name: str) -> None:
@@ -305,9 +363,14 @@ class Database:
                 "SELECT COUNT(*) total,SUM(confirmed) confirmed FROM activity_participants WHERE activity_id=?",
                 (activity_id,),
             )).fetchone()
-            activity = await (await db.execute("SELECT photo_file_id FROM activities WHERE id=?", (activity_id,))).fetchone()
+            activity = await (await db.execute(
+                """SELECT a.photo_file_id,COUNT(p.id) uploaded_photos
+                FROM activities a LEFT JOIN activity_photos p ON p.activity_id=a.id
+                WHERE a.id=? GROUP BY a.id""",
+                (activity_id,),
+            )).fetchone()
             total, confirmed = int(counts["total"]), int(counts["confirmed"] or 0)
-            has_photo = bool(activity["photo_file_id"])
+            has_photo = bool(activity["photo_file_id"] or activity["uploaded_photos"])
             completed = total > 0 and confirmed == total and has_photo
             if completed:
                 await db.execute("UPDATE activities SET status='completed' WHERE id=?", (activity_id,))
@@ -326,16 +389,22 @@ class Database:
                 scheduled = datetime.fromisoformat(activity["scheduled_at"])
                 delta = (scheduled - now).total_seconds()
                 kind = None
-                if 0 < delta <= 24 * 3600 and not activity["reminder_day_sent"]:
+                if 24 * 3600 < delta <= 7 * 24 * 3600 and not activity["reminder_week_sent"]:
+                    kind = "week"
+                elif 3 * 3600 < delta <= 24 * 3600 and not activity["reminder_day_sent"]:
                     kind = "day"
-                if -60 <= delta <= 60 and not activity["reminder_event_sent"]:
+                elif 60 < delta <= 3 * 3600 and not activity["reminder_hours_sent"]:
+                    kind = "hours"
+                elif -60 <= delta <= 60 and not activity["reminder_event_sent"]:
                     kind = "event"
-                if -3 * 3600 <= delta < -60 and not activity["reminder_followup_sent"]:
+                elif -3 * 3600 <= delta < -60 and not activity["reminder_followup_sent"]:
                     kind = "followup"
                 if not kind:
                     continue
                 participants = await (await db.execute(
-                    "SELECT user_id FROM activity_participants WHERE activity_id=?",
+                    f"""SELECT ap.user_id FROM activity_participants ap
+                    LEFT JOIN user_settings s ON s.user_id=ap.user_id
+                    WHERE ap.activity_id=? AND COALESCE(s.reminder_{kind},1)=1""",
                     (activity["id"],),
                 )).fetchall()
                 for participant in participants:
