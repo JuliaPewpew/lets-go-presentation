@@ -3,7 +3,11 @@ from aiohttp import web
 
 def register_miniapp_routes(app: web.Application, api) -> None:
     """The public Mini App API, grouped by product area for easy extension."""
-    app.add_routes([web.get("/", api.index), web.get("/api/bootstrap", api.bootstrap)])
+    app.add_routes([
+        web.get("/", api.index),
+        web.get("/assets/{name}", api.asset),
+        web.get("/api/bootstrap", api.bootstrap),
+    ])
     app.add_routes([
         web.post("/api/company", api.create_company),
         web.post("/api/company/switch", api.switch_company),
@@ -31,4 +35,3 @@ def register_miniapp_routes(app: web.Application, api) -> None:
         web.get("/api/archive/photo/{photo_id}", api.archive_photo),
         web.post("/api/settings", api.update_settings),
     ])
-

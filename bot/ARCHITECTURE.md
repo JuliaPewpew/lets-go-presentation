@@ -14,7 +14,11 @@ separate so a new feature does not require changing unrelated code.
 - reminders.py — reminder copy and delivery loop without global state.
 - database.py — SQLite persistence.
 - migrations.py — ordered, idempotent schema evolution with an audit trail.
-- miniapp.html — the dependency-free Telegram Mini App client.
+- miniapp.html — stable Mini App document structure.
+- miniapp.css — visual system and responsive layout.
+- miniapp.js — client state, rendering, and API interactions.
+- schema.py — declarative schema for fresh databases.
+- telegram_ui.py — Telegram states and reusable keyboards.
 
 ## Adding a feature
 

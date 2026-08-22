@@ -9,68 +9,18 @@ from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, MenuButtonWebApp, Message, ReplyKeyboardMarkup, WebAppInfo
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, MenuButtonWebApp, Message, WebAppInfo
 from aiogram.client.default import DefaultBotProperties
 
 from .config import load_config
 from .database import Database
 from .miniapp import start_miniapp
 from .reminders import reminder_loop
+from .telegram_ui import CompanyForm, IdeaForm, MENU_ACTIONS, PlanForm, invite_keyboard, menu, scale_keyboard
 
 
 router = Router()
 db: Database
-
-MENU_ACTIONS = {
-    "🗳 Голосование", "🎲 Что делаем?",
-    "➕ Новая идея", "➕ Добавить идею",
-    "💡 Все идеи", "📋 Наш список",
-    "📍 Текущая активность", "🏆 Активность",
-    "🖼 Архив",
-    "👥 Компания и друзья", "👥 Компания",
-}
-
-
-class CompanyForm(StatesGroup):
-    name = State()
-
-
-class IdeaForm(StatesGroup):
-    title = State()
-    description = State()
-    difficulty = State()
-    budget = State()
-    duration = State()
-    anonymous = State()
-
-
-class PlanForm(StatesGroup):
-    date = State()
-
-
-def menu() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="🗳 Голосование"), KeyboardButton(text="➕ Новая идея")],
-            [KeyboardButton(text="💡 Все идеи"), KeyboardButton(text="📍 Текущая активность")],
-            [KeyboardButton(text="🖼 Архив"), KeyboardButton(text="👥 Компания и друзья")],
-        ],
-        resize_keyboard=True,
-    )
-
-
-def scale_keyboard(prefix: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text=str(n), callback_data=f"{prefix}:{n}") for n in range(1, 6)
-    ]])
-
-
-def invite_keyboard(invite: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="Вступить в компанию 🚀", url=invite)
-    ]])
-
 
 async def voting_view(round_id: int, viewer_id: int):
     voting_round, members = await db.voting_status(round_id)

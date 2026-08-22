@@ -1,6 +1,6 @@
 import unittest
 
-from bot.main import MENU_ACTIONS, invite_keyboard, menu, scale_keyboard
+from bot.telegram_ui import MENU_ACTIONS, invite_keyboard, menu, scale_keyboard
 
 
 class UiTests(unittest.TestCase):

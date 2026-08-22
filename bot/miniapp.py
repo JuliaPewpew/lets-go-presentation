@@ -65,6 +65,19 @@ class MiniApp:
     async def index(self, request):
         return web.FileResponse(Path(__file__).with_name("miniapp.html"))
 
+    async def asset(self, request):
+        assets = {
+            "miniapp.css": ("miniapp.css", "text/css"),
+            "miniapp.js": ("miniapp.js", "application/javascript"),
+        }
+        asset = assets.get(request.match_info["name"])
+        if not asset:
+            raise web.HTTPNotFound()
+        return web.FileResponse(
+            Path(__file__).with_name(asset[0]),
+            headers={"Content-Type": f"{asset[1]}; charset=utf-8", "Cache-Control": "public, max-age=300"},
+        )
+
     async def bootstrap(self, request):
         user = self.user(request)
         await self.db.upsert_user(user["id"], user.get("username"), " ".join(filter(None, [user.get("first_name"), user.get("last_name")])) or "Друг")

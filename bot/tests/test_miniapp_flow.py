@@ -64,6 +64,18 @@ class MiniAppFlowTests(AioHTTPTestCase):
         self.assertLess(response.status, 400, text)
         return json.loads(text)
 
+    async def test_miniapp_assets_are_served_separately(self):
+        page = await self.client.get("/")
+        html = await page.text()
+        self.assertIn('/assets/miniapp.css', html)
+        self.assertIn('/assets/miniapp.js', html)
+        javascript = await self.client.get("/assets/miniapp.js")
+        stylesheet = await self.client.get("/assets/miniapp.css")
+        self.assertEqual(javascript.status, 200)
+        self.assertEqual(stylesheet.status, 200)
+        self.assertIn("application/javascript", javascript.headers["Content-Type"])
+        self.assertIn("text/css", stylesheet.headers["Content-Type"])
+
     async def test_complete_company_to_activity_flow(self):
         created = await self.request_json("POST", "/api/company", {"name": "Тестовая компания"})
         self.assertIn("start=join_", created["invite"])
