@@ -130,12 +130,13 @@ async def start(message: Message, state: FSMContext, bot: Bot):
 
 @router.callback_query(F.data == "company:create")
 async def create_company_start(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
     await state.set_state(CompanyForm.name)
     await callback.message.answer("Как назовём вашу компанию?")
     await callback.answer()
 
 
-@router.message(CompanyForm.name)
+@router.message(CompanyForm.name, ~F.text.in_(MENU_ACTIONS))
 async def create_company_finish(message: Message, state: FSMContext, bot: Bot):
     name = (message.text or "").strip()[:60]
     if len(name) < 2:
@@ -161,11 +162,37 @@ async def company_info(message: Message, bot: Bot, state: FSMContext):
         return
     me = await bot.get_me()
     invite = f"https://t.me/{me.username}?start=join_{company['invite_code']}"
+    companies = await db.user_companies(message.from_user.id)
+    buttons = [[InlineKeyboardButton(
+        text=f"{'✅ ' if item['active'] else ''}{item['name']}",
+        callback_data=f"company:switch:{item['id']}",
+    )] for item in companies]
+    buttons.append([InlineKeyboardButton(text="➕ Создать ещё компанию", callback_data="company:create")])
     await message.answer(
-        f"<b>{escape(company['name'])}</b>\n\n"
+        f"Активная компания: <b>{escape(company['name'])}</b>\n"
+        f"Всего ваших компаний: {len(companies)}\n\n"
         f"Пригласить друзей:\n<a href=\"{invite}\">{invite}</a>",
-        reply_markup=invite_keyboard(invite),
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Вступить по ссылке 🚀", url=invite)],
+            *buttons,
+        ]),
     )
+
+
+@router.callback_query(F.data.startswith("company:switch:"))
+async def company_switch(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    company_id = int(callback.data.rsplit(":", 1)[1])
+    name = await db.switch_company(callback.from_user.id, company_id)
+    if not name:
+        await callback.answer("Эта компания вам недоступна.", show_alert=True)
+        return
+    await callback.message.answer(
+        f"Переключились на компанию <b>{escape(name)}</b> ✅\n"
+        "Идеи, голосование, активность и архив теперь показываются для неё.",
+        reply_markup=menu(),
+    )
+    await callback.answer("Компания выбрана")
 
 
 @router.message(F.text.in_({"➕ Новая идея", "➕ Добавить идею"}))

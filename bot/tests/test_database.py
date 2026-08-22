@@ -80,6 +80,20 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         company = await self.db.active_company(2)
         self.assertEqual(company["id"], self.company_id)
 
+    async def test_user_can_create_and_switch_between_companies(self):
+        second_id, _ = await self.db.create_company(1, "Коллеги")
+        companies = await self.db.user_companies(1)
+        self.assertEqual({row["id"] for row in companies}, {self.company_id, second_id})
+        self.assertEqual(next(row["id"] for row in companies if row["active"]), second_id)
+        self.assertEqual(await self.db.switch_company(1, self.company_id), "Свои")
+        self.assertEqual((await self.db.active_company(1))["id"], self.company_id)
+
+    async def test_user_cannot_switch_to_foreign_company(self):
+        await self.db.upsert_user(3, "stranger", "Чужой")
+        foreign_id, _ = await self.db.create_company(3, "Чужая компания")
+        self.assertIsNone(await self.db.switch_company(1, foreign_id))
+        self.assertEqual((await self.db.active_company(1))["id"], self.company_id)
+
     async def test_rating_must_be_between_one_and_five(self):
         with self.assertRaises(aiosqlite.IntegrityError):
             await self.db.add_idea(self.company_id, 1, "Невозможная оценка", 6, 1, 1, False)

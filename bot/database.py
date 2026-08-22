@@ -151,6 +151,30 @@ class Database:
                 (user_id,),
             )).fetchone()
 
+    async def user_companies(self, user_id: int):
+        async with self.connect() as db:
+            return await (await db.execute(
+                """SELECT c.*,c.id=u.active_company_id active
+                FROM members m
+                JOIN companies c ON c.id=m.company_id
+                JOIN users u ON u.id=m.user_id
+                WHERE m.user_id=? ORDER BY active DESC,c.name""",
+                (user_id,),
+            )).fetchall()
+
+    async def switch_company(self, user_id: int, company_id: int) -> str | None:
+        async with self.connect() as db:
+            company = await (await db.execute(
+                """SELECT c.name FROM companies c JOIN members m ON m.company_id=c.id
+                WHERE c.id=? AND m.user_id=?""",
+                (company_id, user_id),
+            )).fetchone()
+            if not company:
+                return None
+            await db.execute("UPDATE users SET active_company_id=? WHERE id=?", (company_id, user_id))
+            await db.commit()
+            return str(company["name"])
+
     async def add_idea(self, company_id: int, author_id: int, title: str, difficulty: int, budget: int, duration: int, anonymous: bool, description: str | None = None) -> int:
         async with self.connect() as db:
             cursor = await db.execute(
